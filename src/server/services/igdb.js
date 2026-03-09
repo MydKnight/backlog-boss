@@ -162,8 +162,16 @@ export async function enrichGamesFromIgdb(user) {
 
   try {
     const games = getGamesNeedingIgdbEnrich();
+    const total = games.length;
+    console.log(`IGDB: ${total} games to enrich`);
 
-    for (const game of games) {
+    for (let i = 0; i < games.length; i++) {
+      const game = games[i];
+
+      if (i > 0 && i % 25 === 0) {
+        console.log(`IGDB: ${i}/${total} (${Math.round(i / total * 100)}%) — ${gamesUpdated} matched so far`);
+      }
+
       const igdbData = await lookupBySteamAppId(game.steam_app_id);
 
       if (igdbData) {
@@ -173,9 +181,6 @@ export async function enrichGamesFromIgdb(user) {
         } catch (err) {
           errors.push(`steam_app_id ${game.steam_app_id}: ${err.message}`);
         }
-      } else {
-        // No IGDB match — not an error, just log it
-        console.log(`No IGDB match for "${game.title}" (appid ${game.steam_app_id})`);
       }
     }
 

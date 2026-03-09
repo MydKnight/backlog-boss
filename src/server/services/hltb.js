@@ -103,8 +103,18 @@ export async function lookupHltbForAllGames(user) {
 
   try {
     const games = getGamesNeedingHltbLookup();
+    const total = games.length;
+    const estMins = Math.ceil(total * 0.5 / 60);
+    console.log(`HLTB: ${total} games to look up (~${estMins} min estimated)`);
 
-    for (const game of games) {
+    for (let i = 0; i < games.length; i++) {
+      const game = games[i];
+
+      if (i > 0 && i % 10 === 0) {
+        const remaining = Math.ceil((total - i) * 0.5 / 60);
+        console.log(`HLTB: ${i}/${total} (${Math.round(i / total * 100)}%) — ~${remaining} min remaining`);
+      }
+
       try {
         const data = await fetchByTitle(game.title);
 
