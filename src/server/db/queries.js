@@ -59,9 +59,21 @@ export function upsertGameFromSteam({ steamAppId, title }) {
 
 /**
  * Enrich a games row with IGDB metadata.
+ * If the igdb_id is already claimed by a different steam_app_id (duplicate Steam
+ * entries pointing to the same IGDB game), the update is skipped — the first
+ * match wins and the duplicate Steam entry is left without an igdb_id.
  */
 export function updateGameFromIgdb(steamAppId, { igdbId, title, coverUrl, genres, themes, similarIgdbIds }) {
-  getDb().prepare(`
+  const db = getDb();
+
+  // Guard: if this igdb_id already belongs to a different steam_app_id, skip
+  const conflict = db.prepare(
+    'SELECT steam_app_id FROM games WHERE igdb_id = ? AND steam_app_id != ?'
+  ).get(igdbId, steamAppId);
+
+  if (conflict) return; // duplicate — leave this steam entry without an igdb_id
+
+  db.prepare(`
     UPDATE games SET
       igdb_id          = :igdbId,
       title            = :title,

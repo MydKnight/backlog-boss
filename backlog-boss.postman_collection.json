@@ -48,6 +48,30 @@
       ]
     },
     {
+      "name": "HLTB Diagnostics",
+      "item": [
+        {
+          "name": "Test HLTB Lookup",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/hltb/test?title=Portal",
+              "host": ["{{base_url}}"],
+              "path": ["api", "hltb", "test"],
+              "query": [
+                {
+                  "key": "title",
+                  "value": "Portal",
+                  "description": "Game title to search on HLTB"
+                }
+              ]
+            },
+            "description": "Returns both the raw HLTB API response and the mapped result. Use to verify the search key extraction is working and that times are being converted correctly."
+          }
+        }
+      ]
+    },
+    {
       "name": "IGDB Diagnostics",
       "item": [
         {

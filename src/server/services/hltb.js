@@ -1,66 +1,162 @@
 /**
- * HLTB Abstraction Layer
+ * HLTB Abstraction Layer — Direct Implementation
  *
- * ALL HowLongToBeat access in this codebase goes through this file only.
- * The howlongtobeat npm package is unofficial and breaks periodically.
- * When it does, this is the only file that needs updating.
+ * HLTB renamed their search endpoint from /api/search/{key} to /api/finder.
+ * No dynamic key extraction needed. Same request body format as before.
  *
- * Exposed API (the rest of the app only calls these):
- *   fetchByTitle(title)    → { hltb_id, main, mainExtras, completionist } | null
- *   fetchByHltbId(id)      → { hltb_id, main, mainExtras, completionist } | null
+ * Exported API (contract unchanged):
+ *   fetchByTitle(title)         → { hltb_id, main, mainExtras, completionist } | null
+ *   fetchByHltbId(id)           → { hltb_id, main, mainExtras, completionist } | null
+ *   lookupHltbForAllGames(user) → { gamesUpdated, errors }
+ *   searchRaw(title)            → raw HLTB API response (for diagnostics)
+ *   debugKeyExtraction()        → diagnostic info (for /api/hltb/debug-key)
  */
 
 import { getGamesNeedingHltbLookup, updateGameFromHltb, startSyncLog, completeSyncLog } from '../db/queries.js';
 
-// Dynamic import — isolates breakage if the package changes its export shape.
-// v1.8.0 API: search(string) → Promise<HowLongToBeatEntry[]>
-// Each entry: { id, name, gameplayMain, gameplayMainExtra, gameplayCompletionist, similarity }
-let _hltbService = null;
-async function getService() {
-  if (!_hltbService) {
-    const mod = await import('howlongtobeat');
-    // Package exports { HowLongToBeatService } as named + default
-    const Ctor = mod.HowLongToBeatService ?? mod.default?.HowLongToBeatService ?? mod.default;
-    _hltbService = new Ctor();
-  }
-  return _hltbService;
+const HLTB_BASE = 'https://howlongtobeat.com';
+
+const HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Accept': '*/*',
+  'Accept-Language': 'en-US,en;q=0.9',
+  'Referer': 'https://howlongtobeat.com/',
+  'Origin': 'https://howlongtobeat.com',
+  'Sec-Fetch-Dest': 'empty',
+  'Sec-Fetch-Mode': 'cors',
+  'Sec-Fetch-Site': 'same-origin',
+};
+
+// ---------------------------------------------------------------------------
+// Init + cookie forwarding
+// HLTB's frontend calls /api/finder/init on page load and may set cookies
+// that are required for subsequent API calls.
+// ---------------------------------------------------------------------------
+
+let _token = null;
+
+async function ensureInit() {
+  if (_token) return;
+  const res = await fetch(`${HLTB_BASE}/api/finder/init?t=${Date.now()}`, { headers: HEADERS });
+  if (!res.ok) throw new Error(`HLTB init failed: HTTP ${res.status}`);
+  const data = await res.json();
+  _token = data.token;
 }
 
+// ---------------------------------------------------------------------------
+// Search
+// ---------------------------------------------------------------------------
+
 /**
- * Pick the best match from HLTB results.
- * Results already include a similarity score (1.0 = perfect). Take the highest.
- * @param {object[]} results
+ * Call the HLTB search API and return the raw response.
+ * Exported for use by the diagnostic endpoint.
+ * @param {string} title
  */
-function pickBestMatch(results) {
+function buildSearchBody(title) {
+  return JSON.stringify({
+    searchType: 'games',
+    searchTerms: title.trim().split(' '),
+    searchPage: 1,
+    size: 20,
+    useCache: true,
+    searchOptions: {
+      games: {
+        userId: 0,
+        platform: '',
+        sortCategory: 'popular',
+        rangeCategory: 'main',
+        rangeTime: { min: null, max: null },
+        gameplay: { perspective: '', flow: '', genre: '', difficulty: '' },
+        rangeYear: { min: '', max: '' },
+        modifier: '',
+      },
+      users: { sortCategory: 'postcount' },
+      lists: { sortCategory: 'follows' },
+      filter: '',
+      sort: 0,
+      randomizer: 0,
+    },
+  });
+}
+
+async function finderPost(title) {
+  const res = await fetch(`${HLTB_BASE}/api/finder`, {
+    method: 'POST',
+    headers: { ...HEADERS, 'Content-Type': 'application/json', 'x-auth-token': _token },
+    body: buildSearchBody(title),
+  });
+
+  // Token expired — refresh once and retry (mirrors HLTB's own frontend logic)
+  if (res.status === 403) {
+    _token = null;
+    await ensureInit();
+    const retry = await fetch(`${HLTB_BASE}/api/finder`, {
+      method: 'POST',
+      headers: { ...HEADERS, 'Content-Type': 'application/json', 'x-auth-token': _token },
+      body: buildSearchBody(title),
+    });
+    if (!retry.ok) throw new Error(`HLTB /api/finder returned HTTP ${retry.status} after token refresh`);
+    return retry.json();
+  }
+
+  if (!res.ok) throw new Error(`HLTB /api/finder returned HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function searchRaw(title) {
+  await ensureInit();
+  return finderPost(title);
+}
+
+// ---------------------------------------------------------------------------
+// Mapping
+// ---------------------------------------------------------------------------
+
+/**
+ * Pick best match from results by exact title match, falling back to first result.
+ */
+function pickBestMatch(title, results) {
   if (!results || results.length === 0) return null;
-  return results.reduce((best, r) => (r.similarity > best.similarity ? r : best), results[0]);
+  const norm = t => t.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const target = norm(title);
+  return results.find(r => norm(r.game_name) === target) ?? results[0];
 }
 
 /**
- * Map a raw HLTB entry to our standard shape.
- * Defensive fallbacks in case property names shift in future package versions.
- * @param {object} entry
+ * Convert a raw HLTB time value to hours.
+ * HLTB returns times in seconds.
+ */
+function toHours(seconds) {
+  if (!seconds || seconds === 0) return null;
+  return Math.round((seconds / 3600) * 10) / 10;
+}
+
+/**
+ * Map a raw HLTB result entry to our standard shape.
  */
 function mapEntry(entry) {
   if (!entry) return null;
   return {
-    hltb_id: entry.id ?? entry.gameId ?? null,
-    main: entry.gameplayMain ?? entry.comp_main ?? null,
-    mainExtras: entry.gameplayMainExtra ?? entry.comp_plus ?? null,
-    completionist: entry.gameplayCompletionist ?? entry.comp_100 ?? null,
+    hltb_id: entry.game_id ?? null,
+    main: toHours(entry.comp_main),
+    mainExtras: toHours(entry.comp_plus),
+    completionist: toHours(entry.comp_100),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
 
 /**
  * Search HLTB by game title and return the best match.
  * @param {string} title
- * @returns {Promise<{ hltb_id: number, main: number, mainExtras: number, completionist: number }|null>}
+ * @returns {Promise<{ hltb_id, main, mainExtras, completionist }|null>}
  */
 export async function fetchByTitle(title) {
   try {
-    const svc = await getService();
-    const results = await svc.search(title);
-    const best = pickBestMatch(results);
+    const raw = await searchRaw(title);
+    const best = pickBestMatch(title, raw?.data ?? []);
     return mapEntry(best);
   } catch (err) {
     console.error(`HLTB fetchByTitle failed for "${title}":`, err.message);
@@ -69,30 +165,108 @@ export async function fetchByTitle(title) {
 }
 
 /**
- * Look up a specific HLTB entry by ID.
- * @param {number} hltbId
- * @returns {Promise<{ hltb_id: number, main: number, mainExtras: number, completionist: number }|null>}
+ * HLTB does not expose a public ID-based lookup endpoint.
+ * Returns null — callers should use fetchByTitle instead.
  */
 export async function fetchByHltbId(hltbId) {
-  try {
-    const svc = await getService();
-    // Some versions expose detail(), others require search by id
-    if (typeof svc.detail === 'function') {
-      const entry = await svc.detail(hltbId);
-      return mapEntry(entry);
-    }
-    // Fallback: not all package versions support direct ID lookup
-    console.warn('HLTB: direct ID lookup not available in this package version');
-    return null;
-  } catch (err) {
-    console.error(`HLTB fetchByHltbId failed for id ${hltbId}:`, err.message);
-    return null;
-  }
+  console.warn(`HLTB: direct ID lookup not supported, use fetchByTitle`);
+  return null;
 }
 
 /**
+ * Diagnostic: show what we find in HLTB's JS bundle and probe candidate endpoints.
+ * Used by GET /api/hltb/debug-key.
+ */
+export async function debugKeyExtraction() {
+  const result = {
+    homepage_fetch_ok: false,
+    script_urls: [],
+    chunks_with_api: [],
+    endpoint_probes: [],
+  };
+
+  const searchBody = JSON.stringify({
+    searchType: 'games', searchTerms: ['Portal'], searchPage: 1, size: 5, useCache: true,
+    searchOptions: {
+      games: { userId: 0, platform: '', sortCategory: 'popular', rangeCategory: 'main',
+        rangeTime: { min: null, max: null }, gameplay: { perspective: '', flow: '', genre: '', subGenre: '' },
+        rangeYear: { min: '', max: '' }, modifier: '' },
+      users: { sortCategory: 'postcount' }, lists: { sortCategory: 'follows' },
+      filter: '', sort: 0, randomizer: 0,
+    },
+  });
+  const postHeaders = { ...HEADERS, 'Content-Type': 'application/json' };
+
+  const candidates = [
+    { method: 'GET',  path: `/api/finder/init?t=${Date.now()}` },
+    { method: 'POST', path: '/api/finder' },
+    { method: 'POST', path: '/api/search' },
+  ];
+  // First run init to capture cookies
+  let probeCookies = '';
+  try {
+    const initRes = await fetch(`${HLTB_BASE}/api/finder/init?t=${Date.now()}`, { headers: HEADERS });
+    const setCookie = initRes.headers.get('set-cookie');
+    result.init_status = initRes.status;
+    result.init_set_cookie = setCookie;
+    if (setCookie) {
+      probeCookies = setCookie.split(',').map(c => c.split(';')[0].trim()).join('; ');
+    }
+  } catch (err) {
+    result.init_error = err.message;
+  }
+
+  const headersWithCookies = { ...postHeaders, ...(probeCookies ? { 'Cookie': probeCookies } : {}) };
+
+  for (const c of candidates) {
+    try {
+      const res = await fetch(`${HLTB_BASE}${c.path}`, {
+        method: c.method,
+        headers: c.method === 'POST' ? headersWithCookies : HEADERS,
+        body: c.method === 'POST' ? searchBody : undefined,
+      });
+      // For 403, grab the raw text to see if it's Cloudflare
+      let body = null;
+      const text = await res.text().catch(() => null);
+      try { body = JSON.parse(text); } catch { body = text?.slice(0, 300); }
+      result.endpoint_probes.push({ path: c.path, method: c.method, status: res.status, body });
+    } catch (err) {
+      result.endpoint_probes.push({ path: c.path, method: c.method, error: err.message });
+    }
+  }
+
+  try {
+    const homeRes = await fetch(HLTB_BASE, { headers: HEADERS });
+    result.homepage_fetch_ok = homeRes.ok;
+    const html = await homeRes.text();
+    result.script_urls = [...html.matchAll(/src="(\/_next\/static\/[^"]+\.js)"/g)].map(m => m[1]);
+
+    for (const url of result.script_urls) {
+      try {
+        const res = await fetch(`${HLTB_BASE}${url}`, { headers: HEADERS });
+        if (!res.ok) continue;
+        const js = await res.text();
+
+        // Wide context around /api/finder specifically to see the full headers object
+        const finderSnippets = [...js.matchAll(/.{0,300}\/api\/finder["'`].{0,300}/g)].map(m => m[0]);
+        if (finderSnippets.length > 0) {
+          result.chunks_with_api.push({ url, finder_snippets: finderSnippets });
+        }
+      } catch { /* skip */ }
+    }
+  } catch (err) {
+    result.error = err.message;
+  }
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Batch lookup (called by sync)
+// ---------------------------------------------------------------------------
+
+/**
  * Run HLTB lookups for all games that need it (no data or cache expired).
- * Inserts a 500ms delay between requests to be polite to the unofficial API.
  * @param {{ id: number }} user
  * @returns {Promise<{ gamesUpdated: number, errors: string[] }>}
  */
@@ -117,19 +291,16 @@ export async function lookupHltbForAllGames(user) {
 
       try {
         const data = await fetchByTitle(game.title);
-
-        if (data) {
-          updateGameFromHltb(game.id, data);
-          gamesUpdated++;
-        } else {
-          // Mark as attempted so we don't retry until TTL expires
-          updateGameFromHltb(game.id, { hltb_id: null, main: null, mainExtras: null, completionist: null });
-        }
+        // Always set hltb_fetched_at — even null results — so we respect the 30-day TTL
+        updateGameFromHltb(game.id, data ?? { hltb_id: null, main: null, mainExtras: null, completionist: null });
+        if (data) gamesUpdated++;
       } catch (err) {
         errors.push(`game id ${game.id} "${game.title}": ${err.message}`);
+        try {
+          updateGameFromHltb(game.id, { hltb_id: null, main: null, mainExtras: null, completionist: null });
+        } catch {}
       }
 
-      // Polite delay between HLTB requests
       await new Promise(r => setTimeout(r, 500));
     }
 

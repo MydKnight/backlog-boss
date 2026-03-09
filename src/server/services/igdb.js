@@ -94,31 +94,48 @@ function formatCoverUrl(url) {
  * @param {number} steamAppId
  * @returns {Promise<object|null>}
  */
-export async function lookupBySteamAppId(steamAppId) {
+/**
+ * Look up a single game on IGDB by Steam App ID.
+ * Uses the external_games endpoint without a category filter — IGDB's Steam
+ * category data is unreliable (category field missing on many Steam entries).
+ * When multiple candidates share a uid, title-matching picks the right one.
+ * @param {number} steamAppId
+ * @param {string} [steamTitle]  Steam game title used to disambiguate multiple candidates
+ * @returns {Promise<object|null>}
+ */
+export async function lookupBySteamAppId(steamAppId, steamTitle = null) {
   try {
-    // Step 1: resolve Steam App ID → IGDB game ID via the external_games endpoint.
-    // Filtering on external_games.uid directly from /games is unreliable in IGDB's API.
+    // Step 1: get all external_games records for this uid (no category filter)
     const extResults = await igdbRequest('external_games', `
       fields game, uid, category;
-      where uid = "${steamAppId}" & category = 1;
-      limit 1;
+      where uid = "${steamAppId}";
+      limit 10;
     `);
 
     if (!extResults || extResults.length === 0) return null;
 
-    const igdbGameId = extResults[0].game;
-    if (!igdbGameId) return null;
+    const gameIds = [...new Set(extResults.map(e => e.game).filter(Boolean))];
+    if (gameIds.length === 0) return null;
 
-    // Step 2: fetch full game details by IGDB ID
+    // Step 2: fetch all candidate games in one request
     const gameResults = await igdbRequest('games', `
-      fields id, name, cover.url, genres.name, themes.name, similar_games, first_release_date;
-      where id = ${igdbGameId};
-      limit 1;
+      fields id, name, cover.url, genres.name, themes.name, similar_games;
+      where id = (${gameIds.join(',')});
+      limit ${gameIds.length};
     `);
 
     if (!gameResults || gameResults.length === 0) return null;
 
-    const game = gameResults[0];
+    // Step 3: if multiple candidates, pick the closest title match
+    let game;
+    if (steamTitle && gameResults.length > 1) {
+      const norm = t => t.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const target = norm(steamTitle);
+      game = gameResults.find(g => norm(g.name) === target) ?? gameResults[0];
+    } else {
+      game = gameResults[0];
+    }
+
     return {
       igdbId: game.id,
       title: game.name,
@@ -164,6 +181,55 @@ export async function searchByName(query) {
 }
 
 /**
+ * Raw diagnostic lookup — returns intermediate results at each step so failures are visible.
+ * Only used by GET /api/igdb/raw-lookup.
+ * @param {number} steamAppId
+ */
+export async function igdbRawLookup(steamAppId) {
+  const detail = {
+    steamAppId,
+    // Try 1: external_games with uid + category = 1 (Steam)
+    ext_uid_and_category: null,
+    ext_uid_and_category_error: null,
+    // Try 2: external_games with uid only (no category filter — see if uid matches at all)
+    ext_uid_only: null,
+    ext_uid_only_error: null,
+    // Try 3: external_games with no filter (sanity check — can we read this endpoint at all?)
+    ext_any: null,
+    ext_any_error: null,
+    // Try 4: games search by name (bypass external_games entirely)
+    games_by_name: null,
+    games_by_name_error: null,
+  };
+
+  try {
+    detail.ext_uid_and_category = await igdbRequest('external_games',
+      `fields game, uid, category; where uid = "${steamAppId}" & category = 1; limit 1;`
+    );
+  } catch (err) { detail.ext_uid_and_category_error = err.message; }
+
+  try {
+    detail.ext_uid_only = await igdbRequest('external_games',
+      `fields game, uid, category; where uid = "${steamAppId}"; limit 5;`
+    );
+  } catch (err) { detail.ext_uid_only_error = err.message; }
+
+  try {
+    detail.ext_any = await igdbRequest('external_games',
+      `fields game, uid, category; limit 3;`
+    );
+  } catch (err) { detail.ext_any_error = err.message; }
+
+  try {
+    detail.games_by_name = await igdbRequest('games',
+      `fields id, name, cover.url, genres.name; search "Portal"; limit 3;`
+    );
+  } catch (err) { detail.games_by_name_error = err.message; }
+
+  return detail;
+}
+
+/**
  * Enrich all games that are missing IGDB data (or have stale data).
  * Runs after Steam sync. Logs to sync_log.
  * @param {{ id: number }} user
@@ -186,7 +252,7 @@ export async function enrichGamesFromIgdb(user) {
         console.log(`IGDB: ${i}/${total} (${Math.round(i / total * 100)}%) — ${gamesUpdated} matched so far`);
       }
 
-      const igdbData = await lookupBySteamAppId(game.steam_app_id);
+      const igdbData = await lookupBySteamAppId(game.steam_app_id, game.title);
 
       if (igdbData) {
         try {
