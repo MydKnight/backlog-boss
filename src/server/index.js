@@ -3,6 +3,7 @@ import express from 'express';
 import { getDb } from './db/schema.js';
 import { getDefaultUser, createDefaultUser } from './db/queries.js';
 import syncRouter from './routes/sync.js';
+import igdbRouter from './routes/igdb.js';
 
 const PORT = process.env.PORT || 3000;
 
@@ -58,6 +59,7 @@ app.get('/api/health', (req, res) => {
 });
 
 app.use('/api/sync', syncRouter);
+app.use('/api/igdb', igdbRouter);
 
 // 404 fallback
 app.use((req, res) => {

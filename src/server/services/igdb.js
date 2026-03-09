@@ -96,15 +96,29 @@ function formatCoverUrl(url) {
  */
 export async function lookupBySteamAppId(steamAppId) {
   try {
-    const results = await igdbRequest('games', `
-      fields id, name, cover.url, genres.name, themes.name, similar_games, first_release_date;
-      where external_games.uid = "${steamAppId}" & external_games.category = 1;
+    // Step 1: resolve Steam App ID → IGDB game ID via the external_games endpoint.
+    // Filtering on external_games.uid directly from /games is unreliable in IGDB's API.
+    const extResults = await igdbRequest('external_games', `
+      fields game, uid, category;
+      where uid = "${steamAppId}" & category = 1;
       limit 1;
     `);
 
-    if (!results || results.length === 0) return null;
+    if (!extResults || extResults.length === 0) return null;
 
-    const game = results[0];
+    const igdbGameId = extResults[0].game;
+    if (!igdbGameId) return null;
+
+    // Step 2: fetch full game details by IGDB ID
+    const gameResults = await igdbRequest('games', `
+      fields id, name, cover.url, genres.name, themes.name, similar_games, first_release_date;
+      where id = ${igdbGameId};
+      limit 1;
+    `);
+
+    if (!gameResults || gameResults.length === 0) return null;
+
+    const game = gameResults[0];
     return {
       igdbId: game.id,
       title: game.name,
