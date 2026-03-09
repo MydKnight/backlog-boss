@@ -1,0 +1,15 @@
+version: '3.8'
+services:
+  backlog-boss:
+    image: backlog-boss:latest
+    container_name: backlog-boss
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - /share/Container/backlog-boss/data:/app/data
+      - /share/Container/backlog-boss/.env:/app/.env
+    environment:
+      - NODE_ENV=production
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
