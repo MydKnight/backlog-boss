@@ -1,0 +1,94 @@
+{
+  "info": {
+    "name": "Backlog Boss",
+    "_postman_id": "backlog-boss-v1",
+    "description": "API collection for Backlog Boss. Base URL: http://localhost:3000",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/health",
+            "description": "Confirms server is running, user exists, and Steam credentials are configured."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Sync",
+      "item": [
+        {
+          "name": "Trigger Full Sync",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/sync",
+            "description": "Runs all three sync phases in order: Steam library → IGDB enrichment → HLTB lookup. Will take several minutes for large libraries. Watch server console for progress. Set Postman request timeout to 0 (unlimited) in Settings."
+          }
+        },
+        {
+          "name": "Sync Status (Recent Logs)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/sync/status",
+            "description": "Returns the 10 most recent sync log entries. Check status field for success/partial/failed."
+          }
+        }
+      ]
+    },
+    {
+      "name": "IGDB Diagnostics",
+      "item": [
+        {
+          "name": "Lookup by Steam App ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/igdb/lookup?appid=400",
+              "host": ["{{base_url}}"],
+              "path": ["api", "igdb", "lookup"],
+              "query": [
+                {
+                  "key": "appid",
+                  "value": "400",
+                  "description": "Steam App ID to look up (400 = Portal)"
+                }
+              ]
+            },
+            "description": "Look up a single game by Steam App ID. Use this to verify IGDB credentials and query logic are working before running a full sync."
+          }
+        },
+        {
+          "name": "Search by Name",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/igdb/search?q=Portal",
+              "host": ["{{base_url}}"],
+              "path": ["api", "igdb", "search"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "Portal",
+                  "description": "Game title to search"
+                }
+              ]
+            },
+            "description": "Search IGDB by game name. Used by the History view — also useful for verifying IGDB connectivity."
+          }
+        }
+      ]
+    }
+  ]
+}
