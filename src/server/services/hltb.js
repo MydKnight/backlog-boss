@@ -12,41 +12,33 @@
 
 import { getGamesNeedingHltbLookup, updateGameFromHltb, startSyncLog, completeSyncLog } from '../db/queries.js';
 
-// Dynamic import — isolates breakage if the package changes its export shape
+// Dynamic import — isolates breakage if the package changes its export shape.
+// v1.8.0 API: search(string) → Promise<HowLongToBeatEntry[]>
+// Each entry: { id, name, gameplayMain, gameplayMainExtra, gameplayCompletionist, similarity }
 let _hltbService = null;
 async function getService() {
   if (!_hltbService) {
     const mod = await import('howlongtobeat');
-    const Ctor = mod.default ?? mod.HowLongToBeatService;
+    // Package exports { HowLongToBeatService } as named + default
+    const Ctor = mod.HowLongToBeatService ?? mod.default?.HowLongToBeatService ?? mod.default;
     _hltbService = new Ctor();
   }
   return _hltbService;
 }
 
 /**
- * Normalise a title for comparison (lowercase, strip punctuation).
- * @param {string} title
- */
-function normalise(title) {
-  return title.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
-}
-
-/**
- * Pick the best match from HLTB search results.
- * Prefers exact normalised title match; falls back to first result.
- * @param {string} title
+ * Pick the best match from HLTB results.
+ * Results already include a similarity score (1.0 = perfect). Take the highest.
  * @param {object[]} results
  */
-function pickBestMatch(title, results) {
+function pickBestMatch(results) {
   if (!results || results.length === 0) return null;
-  const norm = normalise(title);
-  const exact = results.find(r => normalise(r.name) === norm);
-  return exact ?? results[0];
+  return results.reduce((best, r) => (r.similarity > best.similarity ? r : best), results[0]);
 }
 
 /**
- * Map a raw HLTB result object to our standard shape.
- * Property names vary between package versions — handled defensively.
+ * Map a raw HLTB entry to our standard shape.
+ * Defensive fallbacks in case property names shift in future package versions.
  * @param {object} entry
  */
 function mapEntry(entry) {
@@ -67,8 +59,8 @@ function mapEntry(entry) {
 export async function fetchByTitle(title) {
   try {
     const svc = await getService();
-    const results = await svc.search([title]);
-    const best = pickBestMatch(title, results);
+    const results = await svc.search(title);
+    const best = pickBestMatch(results);
     return mapEntry(best);
   } catch (err) {
     console.error(`HLTB fetchByTitle failed for "${title}":`, err.message);
