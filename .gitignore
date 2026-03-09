@@ -1,0 +1,15 @@
+# Database — never commit live data
+/data/
+
+# Dependencies
+node_modules/
+
+# Environment — .env.example is committed, .env is not
+.env
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Build output (Phase 2+)
+/src/client/dist/
