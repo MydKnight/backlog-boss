@@ -203,6 +203,22 @@ games appear in Done/History.
 - [ ] `backburner` games excluded from Now even if playtime >= threshold
 - [ ] "Move to Now" action on backburner games in Next restores `in_progress`
 
+#### Phase 3 Commit Decomposition
+Phase 3 is split into two tested-then-committed checkpoints:
+
+**3.1 — Data + sync layer**
+Add `ongoing` and `backburner` to valid status values. Protect both from Steam sync
+overwrite (sync skips user_games rows with these statuses). New queries:
+`setOngoing(userId, igdbId)`, `setBackburner(userId, igdbId)`, `restoreToNow(userId, igdbId)`.
+New API endpoints: POST `/api/games/:igdbId/set-ongoing`, `/set-backburner`, `/restore-to-now`.
+Verify via Postman/curl before UI work begins.
+
+**3.2 — UI**
+Now view: "→ Next" pill on each card (sets backburner), "Mark as Ongoing" action in
+action sheet, "Always On" section for ongoing games (no HLTB bar). Next view:
+backburner games included with visual indicator, "Move to Now" action. Auto-detection
+banner for HLTB-null + playtime > 10h candidates.
+
 ### Phase 4 Done
 - [ ] Ollama integration service functional
 - [ ] Taste profile context builder assembles correct payload

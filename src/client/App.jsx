@@ -29,7 +29,7 @@ export default function App() {
       </header>
       <main className="flex-1 overflow-y-auto">
         {tab === 'now'     && <Now     refreshKey={refreshKey} onGameAction={handleSyncComplete} />}
-        {tab === 'next'    && <Next    refreshKey={refreshKey} />}
+        {tab === 'next'    && <Next    refreshKey={refreshKey} onGameAction={handleSyncComplete} />}
         {tab === 'done'    && <Done    refreshKey={refreshKey} />}
         {tab === 'history' && <History />}
       </main>

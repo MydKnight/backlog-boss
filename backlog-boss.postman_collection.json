@@ -10,6 +10,12 @@
       "key": "base_url",
       "value": "http://localhost:3000",
       "type": "string"
+    },
+    {
+      "key": "igdb_id",
+      "value": "7332",
+      "description": "Default igdb_id used in game action requests. Replace with a real igdb_id from your library.",
+      "type": "string"
     }
   ],
   "item": [
@@ -43,6 +49,145 @@
             "method": "GET",
             "url": "{{base_url}}/api/sync/status",
             "description": "Returns the 10 most recent sync log entries. Check status field for success/partial/failed."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Games — Views",
+      "item": [
+        {
+          "name": "Get Now (in-progress + ongoing)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/games/now",
+            "description": "Returns two arrays: games (in-progress, sorted by completion proximity) and ongoing (Always On section, no HLTB bar)."
+          }
+        },
+        {
+          "name": "Get Next (backlog)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/games/next",
+            "description": "Returns unplayed and backburner games sorted alphabetically. Each game includes a status field — backburner games will have status='backburner'."
+          }
+        },
+        {
+          "name": "Get Done (completed)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/games/done",
+            "description": "Returns completed games sorted by most recently beaten, with star rating, tags, and free text."
+          }
+        },
+        {
+          "name": "Get History (all played)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/games/history",
+            "description": "Returns all played games — beaten, retired, and manually logged history entries — with event_type badge (completed/retired/historical)."
+          }
+        },
+        {
+          "name": "Get Ongoing Candidates",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/games/ongoing-candidates",
+            "description": "Games with > 10h playtime and no HLTB data — likely live service or sandbox games that should be classified as ongoing."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Games — Status Actions",
+      "item": [
+        {
+          "name": "Mark Beaten",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/games/{{igdb_id}}/beaten",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"starRating\": 4,\n  \"positiveTags\": [\"great_story\", \"loved_gameplay\"],\n  \"negativeTags\": [],\n  \"freeText\": \"Loved it.\"\n}"
+            },
+            "description": "Mark a game as completed. starRating (1-5) is required. positiveTags options: great_story, loved_gameplay, hidden_gem, overhyped, would_replay, recommend. negativeTags options: felt_repetitive, too_difficult, lost_interest, life_got_busy, not_my_genre, other."
+          }
+        },
+        {
+          "name": "Mark Retired",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/games/{{igdb_id}}/retired",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"negativeTags\": [\"lost_interest\"],\n  \"freeText\": \"Just not for me right now.\"\n}"
+            },
+            "description": "Mark a game as retired. No star rating required. negativeTags options: felt_repetitive, too_difficult, lost_interest, life_got_busy, not_my_genre, other."
+          }
+        },
+        {
+          "name": "Mark Ongoing",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/games/{{igdb_id}}/set-ongoing",
+            "description": "Mark a game as ongoing (live service, sandbox, board game app — no completion state). Moves to Always On section in Now. Exit path is Mark Retired."
+          }
+        },
+        {
+          "name": "Set Backburner (→ Next)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/games/{{igdb_id}}/set-backburner",
+            "description": "Push a Now game to backburner. Removes from Now, appears in Next with backburner indicator. Survives Steam sync (won't be reset to in_progress)."
+          }
+        },
+        {
+          "name": "Restore to Now (from backburner)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/games/{{igdb_id}}/restore-to-now",
+            "description": "Move a backburner game back to in_progress. Will appear in Now view after restore."
+          }
+        },
+        {
+          "name": "Revert to In-Progress (from Done)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/games/{{igdb_id}}/revert",
+            "description": "Move a completed or retired game back to in_progress. Preserves game_events and game_interviews history — the event record is kept for the taste engine."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Games — Log",
+      "item": [
+        {
+          "name": "Log to History",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/games/history",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"igdbData\": {\n    \"igdbId\": 7332,\n    \"title\": \"Portal\",\n    \"coverUrl\": null,\n    \"genres\": [\"Puzzle\"],\n    \"themes\": [],\n    \"similarIgdbIds\": []\n  },\n  \"starRating\": 5,\n  \"positiveTags\": [\"great_story\"],\n  \"freeText\": \"Classic.\"\n}"
+            },
+            "description": "Log a previously played game to History. Ownership type is set to 'historical'. Star rating is optional."
+          }
+        },
+        {
+          "name": "Add Currently Playing (non-Steam)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/games/currently-playing",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"igdbData\": {\n    \"igdbId\": 7332,\n    \"title\": \"Portal\",\n    \"coverUrl\": null,\n    \"genres\": [],\n    \"themes\": [],\n    \"similarIgdbIds\": []\n  },\n  \"ownershipType\": \"owned_ps5\",\n  \"playtimeMinutes\": 120\n}"
+            },
+            "description": "Add a non-Steam game to the Now view. ownershipType must be one of: owned_ps5, owned_switch, owned_other. playtimeMinutes is optional."
           }
         }
       ]

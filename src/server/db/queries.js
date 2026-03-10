@@ -142,6 +142,23 @@ export function resetHltbFetchedAt() {
 export const NOW_THRESHOLD_MINUTES = 60;
 
 /**
+ * Ongoing games for the Now view "Always On" section.
+ * These have no completion state — live service, sandboxes, board game apps, etc.
+ */
+export function getOngoingGames(userId) {
+  return getDb().prepare(`
+    SELECT
+      g.id, g.igdb_id, g.title, g.cover_url, g.genres,
+      ug.playtime_minutes, ug.last_played_at
+    FROM user_games ug
+    JOIN games g ON g.igdb_id = ug.igdb_id
+    WHERE ug.user_id = :userId
+      AND ug.status = 'ongoing'
+    ORDER BY ug.last_played_at DESC NULLS LAST
+  `).all({ userId });
+}
+
+/**
  * In-progress games for the Now view — only games at or above the playtime threshold.
  */
 export function getInProgressGames(userId) {
@@ -168,19 +185,20 @@ export function getInProgressGames(userId) {
 
 /**
  * Unplayed games for the Next view — includes in_progress games below the Now threshold
- * so nothing falls through the cracks.
+ * and backburner games (explicitly deferred). Excludes ongoing.
  */
 export function getUnplayedGames(userId) {
   return getDb().prepare(`
     SELECT
       g.id, g.igdb_id, g.title, g.cover_url, g.genres,
       g.hltb_main, g.hltb_main_extras,
-      ug.playtime_minutes
+      ug.playtime_minutes, ug.status
     FROM user_games ug
     JOIN games g ON g.igdb_id = ug.igdb_id
     WHERE ug.user_id = :userId
       AND (
         ug.status = 'unplayed'
+        OR ug.status = 'backburner'
         OR (ug.status = 'in_progress' AND ug.playtime_minutes < :threshold)
       )
     ORDER BY g.title ASC
@@ -188,6 +206,56 @@ export function getUnplayedGames(userId) {
 }
 
 /**
+ * Push a game to the backburner — survives Steam sync, excluded from Now.
+ */
+export function setBackburner(userId, igdbId) {
+  getDb().prepare(`
+    UPDATE user_games SET status = 'backburner', updated_at = CURRENT_TIMESTAMP
+    WHERE user_id = :userId AND igdb_id = :igdbId
+  `).run({ userId, igdbId });
+}
+
+/**
+ * Mark a game as ongoing (live service / no completion state).
+ * Excluded from Next and Done. Exit path is retired.
+ */
+export function setOngoing(userId, igdbId) {
+  getDb().prepare(`
+    UPDATE user_games SET status = 'ongoing', updated_at = CURRENT_TIMESTAMP
+    WHERE user_id = :userId AND igdb_id = :igdbId
+  `).run({ userId, igdbId });
+}
+
+/**
+ * Restore a backburner game to in_progress (Move to Now).
+ */
+export function restoreToNow(userId, igdbId) {
+  getDb().prepare(`
+    UPDATE user_games SET status = 'in_progress', updated_at = CURRENT_TIMESTAMP
+    WHERE user_id = :userId AND igdb_id = :igdbId
+  `).run({ userId, igdbId });
+}
+
+/**
+ * Auto-detection: games with no HLTB data and playtime > 10h that haven't
+ * been classified as ongoing/backburner/completed/retired — likely live-service
+ * or sandbox candidates.
+ */
+export function getOngoingCandidates(userId) {
+  return getDb().prepare(`
+    SELECT g.igdb_id, g.title, g.cover_url, ug.playtime_minutes
+    FROM user_games ug
+    JOIN games g ON g.igdb_id = ug.igdb_id
+    WHERE ug.user_id = :userId
+      AND ug.status = 'in_progress'
+      AND ug.playtime_minutes > 600
+      AND g.hltb_main IS NULL
+    ORDER BY ug.playtime_minutes DESC
+  `).all({ userId });
+}
+
+/**
+ * @deprecated Use setBackburner instead. Kept for reference only.
  * Push a game back to the Next view by setting status to unplayed.
  */
 export function pushGameToNext(userId, igdbId) {
@@ -453,7 +521,7 @@ export function upsertUserGameFromSteam(userId, gameRow, { playtimeMinutes, last
     : null;
 
   const newStatus = playtimeMinutes > 0 ? 'in_progress' : 'unplayed';
-  const protectedStatuses = ['completed', 'retired'];
+  const protectedStatuses = ['completed', 'retired', 'ongoing', 'backburner'];
 
   if (existing) {
     const status = protectedStatuses.includes(existing.status)

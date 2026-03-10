@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   getDefaultUser,
   getInProgressGames,
+  getOngoingGames,
   getUnplayedGames,
   getCompletedGames,
   markGameBeaten,
@@ -11,6 +12,10 @@ import {
   logHistoryGame,
   getHistoryGames,
   addCurrentlyPlaying,
+  setBackburner,
+  setOngoing,
+  restoreToNow,
+  getOngoingCandidates,
 } from '../db/queries.js';
 
 const router = Router();
@@ -39,25 +44,37 @@ function parseGame(game) {
 
 /**
  * GET /api/games/now
- * In-progress games sorted by proximity to completion.
+ * In-progress games sorted by proximity to completion, plus ongoing (Always On) games.
  */
 router.get('/now', (req, res) => {
   const user = getDefaultUser();
   if (!user) return res.status(500).json({ error: 'No user configured.' });
 
   const games = getInProgressGames(user.id).map(parseGame);
-  res.json({ games });
+  const ongoing = getOngoingGames(user.id).map(g => ({
+    id: g.id,
+    igdb_id: g.igdb_id,
+    title: g.title,
+    cover_url: g.cover_url ?? null,
+    genres: g.genres ? JSON.parse(g.genres) : [],
+    playtime_minutes: g.playtime_minutes ?? 0,
+    last_played_at: g.last_played_at ?? null,
+  }));
+  res.json({ games, ongoing });
 });
 
 /**
  * GET /api/games/next
- * Unplayed games sorted alphabetically (taste ranking added in Phase 3).
+ * Unplayed + backburner games sorted alphabetically (taste ranking added in Phase 4).
  */
 router.get('/next', (req, res) => {
   const user = getDefaultUser();
   if (!user) return res.status(500).json({ error: 'No user configured.' });
 
-  const games = getUnplayedGames(user.id).map(parseGame);
+  const games = getUnplayedGames(user.id).map(g => ({
+    ...parseGame(g),
+    status: g.status,
+  }));
   res.json({ games, total: games.length });
 });
 
@@ -205,6 +222,74 @@ router.post('/:igdbId/revert', (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+/**
+ * POST /api/games/:igdbId/set-backburner
+ * Push a Now game to backburner — persists across Steam syncs.
+ */
+router.post('/:igdbId/set-backburner', (req, res) => {
+  const user = getDefaultUser();
+  if (!user) return res.status(500).json({ error: 'No user configured.' });
+
+  const igdbId = parseInt(req.params.igdbId);
+  try {
+    setBackburner(user.id, igdbId);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/games/:igdbId/set-ongoing
+ * Mark a game as ongoing (live service / no completion state).
+ */
+router.post('/:igdbId/set-ongoing', (req, res) => {
+  const user = getDefaultUser();
+  if (!user) return res.status(500).json({ error: 'No user configured.' });
+
+  const igdbId = parseInt(req.params.igdbId);
+  try {
+    setOngoing(user.id, igdbId);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/games/:igdbId/restore-to-now
+ * Move a backburner game back to in_progress (Now view).
+ */
+router.post('/:igdbId/restore-to-now', (req, res) => {
+  const user = getDefaultUser();
+  if (!user) return res.status(500).json({ error: 'No user configured.' });
+
+  const igdbId = parseInt(req.params.igdbId);
+  try {
+    restoreToNow(user.id, igdbId);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/games/ongoing-candidates
+ * Games with no HLTB data and > 10h playtime — likely live service / sandbox candidates.
+ */
+router.get('/ongoing-candidates', (req, res) => {
+  const user = getDefaultUser();
+  if (!user) return res.status(500).json({ error: 'No user configured.' });
+
+  const games = getOngoingCandidates(user.id).map(g => ({
+    igdb_id: g.igdb_id,
+    title: g.title,
+    cover_url: g.cover_url ?? null,
+    playtime_minutes: g.playtime_minutes,
+  }));
+  res.json({ games });
 });
 
 export default router;
