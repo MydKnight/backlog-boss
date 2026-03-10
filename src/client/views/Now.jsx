@@ -1,10 +1,37 @@
+import { useState } from 'react';
 import { useApi } from '../hooks/useApi.js';
 import GameCover from '../components/GameCover.jsx';
+import ActionSheet from '../components/ActionSheet.jsx';
+import ExitInterview from '../components/ExitInterview.jsx';
 import { relativeDate, hoursLabel } from '../utils/format.js';
 
-export default function Now({ refreshKey = 0 }) {
+export default function Now({ refreshKey = 0, onGameAction }) {
   const { data, loading, error } = useApi(`/api/games/now?_=${refreshKey}`);
+  const [selected, setSelected] = useState(null); // { game, mode: 'sheet'|'beaten'|'retired' }
   const games = data?.games ?? [];
+
+  function openSheet(game) { setSelected({ game, mode: 'sheet' }); }
+  function close() { setSelected(null); }
+
+  async function submitBeaten(payload) {
+    await fetch(`/api/games/${selected.game.igdb_id}/beaten`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    close();
+    onGameAction?.();
+  }
+
+  async function submitRetired(payload) {
+    await fetch(`/api/games/${selected.game.igdb_id}/retired`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    close();
+    onGameAction?.();
+  }
 
   if (loading) return <div className="p-4 text-slate-500 text-sm">Loading…</div>;
   if (error)   return <div className="p-4 text-red-400 text-sm">Error: {error}</div>;
@@ -24,46 +51,89 @@ export default function Now({ refreshKey = 0 }) {
 
       <ul className="space-y-3">
         {games.map(game => (
-          <NowCard key={game.igdb_id ?? game.id} game={game} />
+          <NowCard key={game.igdb_id ?? game.id} game={game} onTap={() => openSheet(game)} />
         ))}
       </ul>
+
+      {selected?.mode === 'sheet' && (
+        <ActionSheet
+          title={selected.game.title}
+          onClose={close}
+          actions={[
+            {
+              label: 'Mark Beaten',
+              description: 'Record completion with a rating and debrief',
+              onClick: () => setSelected(s => ({ ...s, mode: 'beaten' })),
+            },
+            {
+              label: 'Mark Retired',
+              description: "Stepping away — won't show in Next",
+              onClick: () => setSelected(s => ({ ...s, mode: 'retired' })),
+              danger: true,
+            },
+          ]}
+        />
+      )}
+
+      {selected?.mode === 'beaten' && (
+        <ExitInterview
+          game={selected.game}
+          type="beaten"
+          onSubmit={submitBeaten}
+          onClose={close}
+        />
+      )}
+
+      {selected?.mode === 'retired' && (
+        <ExitInterview
+          game={selected.game}
+          type="retired"
+          onSubmit={submitRetired}
+          onClose={close}
+        />
+      )}
     </div>
   );
 }
 
-function NowCard({ game }) {
+function NowCard({ game, onTap }) {
   const bench = game.hltb_main_extras ?? game.hltb_main;
   const ratio = bench ? Math.min(1, game.playtime_minutes / (bench * 60)) : null;
   const played = hoursLabel(game.playtime_minutes);
   const lastPlayed = relativeDate(game.last_played_at);
 
   return (
-    <li className="flex gap-3 bg-slate-900 rounded-xl p-3">
-      <GameCover
-        coverUrl={game.cover_url}
-        title={game.title}
-        className="w-12 h-16 rounded-lg shrink-0"
-      />
-      <div className="flex-1 min-w-0">
-        <div className="mb-1.5">
-          <span className="font-semibold text-sm leading-tight line-clamp-2">{game.title}</span>
-        </div>
-
-        {ratio != null && (
-          <div className="w-full h-1.5 bg-slate-700 rounded-full mb-1.5" title="Time invested vs. HLTB average">
-            <div
-              className="h-full bg-indigo-500 rounded-full transition-all"
-              style={{ width: `${ratio * 100}%` }}
-            />
+    <li>
+      <button
+        onClick={onTap}
+        className="w-full flex gap-3 bg-slate-900 rounded-xl p-3 text-left active:bg-slate-800 transition-colors"
+      >
+        <GameCover
+          coverUrl={game.cover_url}
+          title={game.title}
+          className="w-12 h-16 rounded-lg shrink-0"
+        />
+        <div className="flex-1 min-w-0">
+          <div className="mb-1.5">
+            <span className="font-semibold text-sm leading-tight line-clamp-2">{game.title}</span>
           </div>
-        )}
 
-        <div className="flex items-center gap-2 text-xs text-slate-400">
-          <span>{played} played</span>
-          {bench != null && <><span>·</span><span>~{bench}h HLTB</span></>}
-          {lastPlayed && <><span>·</span><span>{lastPlayed}</span></>}
+          {ratio != null && (
+            <div className="w-full h-1.5 bg-slate-700 rounded-full mb-1.5" title="Time invested vs. HLTB average">
+              <div
+                className="h-full bg-indigo-500 rounded-full"
+                style={{ width: `${ratio * 100}%` }}
+              />
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 text-xs text-slate-400">
+            <span>{played} played</span>
+            {bench != null && <><span>·</span><span>~{bench}h HLTB</span></>}
+            {lastPlayed && <><span>·</span><span>{lastPlayed}</span></>}
+          </div>
         </div>
-      </div>
+      </button>
     </li>
   );
 }

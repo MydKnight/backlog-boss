@@ -28,9 +28,9 @@ export default function App() {
         <SyncButton onComplete={handleSyncComplete} />
       </header>
       <main className="flex-1 overflow-y-auto">
-        {tab === 'now'     && <Now     refreshKey={refreshKey} />}
+        {tab === 'now'     && <Now     refreshKey={refreshKey} onGameAction={handleSyncComplete} />}
         {tab === 'next'    && <Next    refreshKey={refreshKey} />}
-        {tab === 'done'    && <Done />}
+        {tab === 'done'    && <Done    refreshKey={refreshKey} />}
         {tab === 'history' && <History />}
       </main>
       <TabBar tabs={TABS} active={tab} onChange={setTab} />

@@ -1,6 +1,13 @@
 import { Router } from 'express';
-import { getDefaultUser } from '../db/queries.js';
-import { getInProgressGames, getUnplayedGames } from '../db/queries.js';
+import {
+  getDefaultUser,
+  getInProgressGames,
+  getUnplayedGames,
+  getCompletedGames,
+  markGameBeaten,
+  markGameRetired,
+  revertGameToInProgress,
+} from '../db/queries.js';
 
 const router = Router();
 
@@ -48,6 +55,84 @@ router.get('/next', (req, res) => {
 
   const games = getUnplayedGames(user.id).map(parseGame);
   res.json({ games, total: games.length });
+});
+
+/**
+ * GET /api/games/done
+ * Completed games sorted by most recently beaten.
+ */
+router.get('/done', (req, res) => {
+  const user = getDefaultUser();
+  if (!user) return res.status(500).json({ error: 'No user configured.' });
+
+  const games = getCompletedGames(user.id).map(g => ({
+    id: g.id,
+    igdb_id: g.igdb_id,
+    title: g.title,
+    cover_url: g.cover_url ?? null,
+    star_rating: g.star_rating ?? null,
+    event_date: g.event_date ?? null,
+    positive_tags: g.positive_tags ? JSON.parse(g.positive_tags) : [],
+    free_text: g.free_text ?? null,
+  }));
+
+  res.json({ games });
+});
+
+/**
+ * POST /api/games/:igdbId/beaten
+ * Body: { starRating, positiveTags, negativeTags, freeText }
+ */
+router.post('/:igdbId/beaten', (req, res) => {
+  const user = getDefaultUser();
+  if (!user) return res.status(500).json({ error: 'No user configured.' });
+
+  const igdbId = parseInt(req.params.igdbId);
+  const { starRating, positiveTags, negativeTags, freeText } = req.body;
+
+  try {
+    markGameBeaten(user.id, igdbId, { starRating, positiveTags, negativeTags, freeText });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/games/:igdbId/retired
+ * Body: { negativeTags, freeText }
+ */
+router.post('/:igdbId/retired', (req, res) => {
+  const user = getDefaultUser();
+  if (!user) return res.status(500).json({ error: 'No user configured.' });
+
+  const igdbId = parseInt(req.params.igdbId);
+  const { negativeTags, freeText } = req.body;
+
+  try {
+    markGameRetired(user.id, igdbId, { negativeTags, freeText });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/games/:igdbId/revert
+ * Moves a completed or retired game back to in_progress.
+ * Preserves game_events and game_interviews history.
+ */
+router.post('/:igdbId/revert', (req, res) => {
+  const user = getDefaultUser();
+  if (!user) return res.status(500).json({ error: 'No user configured.' });
+
+  const igdbId = parseInt(req.params.igdbId);
+  try {
+    revertGameToInProgress(user.id, igdbId);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 export default router;

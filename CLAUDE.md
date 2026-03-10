@@ -190,18 +190,23 @@ IGDB search endpoint + UI, manual game logging flow (lighter interview), logged
 games appear in Done/History.
 
 ### Phase 3 Done
-- [ ] `ongoing` status added to `user_games` status enum (DB migration safe — additive only)
-- [ ] "Mark as Ongoing" flow accessible from game detail (no interview, just status change)
+- [ ] `ongoing` status added to `user_games` (additive — safe across syncs)
+- [ ] "Mark as Ongoing" flow on Now cards (no interview, just status change)
 - [ ] Now view renders `ongoing` games in a separate "Always On" section without HLTB bar
 - [ ] Next view excludes `ongoing` games
 - [ ] Done view excludes `ongoing` games
-- [ ] Exit path from `ongoing` is `retired` (existing flow, no changes needed)
-- [ ] Auto-detection heuristic surfaces candidate games (HLTB null + playtime > 10h) for user confirmation
+- [ ] Exit path from `ongoing` is `retired` (existing flow)
+- [ ] Auto-detection heuristic surfaces candidates (HLTB null + playtime > 10h) for confirmation
+- [ ] `backburner` status added to `user_games` (additive, added to protected statuses in Steam sync)
+- [ ] "→ Next" quick action on Now cards sets `backburner` (replaces current `unplayed` approach)
+- [ ] `backburner` games shown in Next alongside unplayed games
+- [ ] `backburner` games excluded from Now even if playtime >= threshold
+- [ ] "Move to Now" action on backburner games in Next restores `in_progress`
 
 ### Phase 4 Done
 - [ ] Ollama integration service functional
 - [ ] Taste profile context builder assembles correct payload
-- [ ] `ongoing` games included as a signal category in the context payload
+- [ ] `ongoing` and `backburner` games handled correctly in context payload
 - [ ] Snapshot generated and stored on demand
 - [ ] Next view displays LLM-ranked suggestions with explanations
 - [ ] "Refresh Suggestions" button triggers new snapshot if context changed

@@ -138,29 +138,33 @@ No social feed, visibility flags, or shared data at any phase of this plan.
 - Manual sync button
 - "Mark beaten" and "Mark retired" flows with full exit interview
 
-### Phase 3 — Ongoing & Infinite Games
-Some games have no completion state — live service games (Path of Exile), app-driven
-board games (Mansions of Madness), sandboxes (Minecraft). The standard
-beaten/retired/unplayed model doesn't fit them.
+### Phase 3 — Game Status & Curation
+Adds two new statuses that require proper persistence across Steam syncs, and
+makes the Now view threshold a reliable curation tool.
 
-**Data model change:**
-- Add `ongoing` to the `status` enum on `user_games`
-- `ongoing` games are not in-progress toward a finish — they're permanently in rotation
+**New statuses (both additive DB changes — safe to add):**
 
-**Behavior by view:**
-- **Now**: `ongoing` games shown in a separate "Always On" section, no HLTB bar
-- **Next**: `ongoing` games excluded — they're already in rotation, not backlog
-- **Done**: `ongoing` games excluded — they're never "done"
-- **History/Taste engine**: playtime and last-played are still valid signals
+`ongoing` — games with no completion state (live service, board game apps, sandboxes)
+- Now: shown in a separate "Always On" section, no HLTB bar
+- Next: excluded — already in rotation, not backlog
+- Done: excluded — never "done"
+- Taste engine: playtime and last-played are still valid signals
+- Flow: "Mark as Ongoing" — no interview, just status change
+- Exit: `retired` (existing flow)
+- Auto-detection heuristic: surface candidates where HLTB is null AND playtime > 10h
 
-**New flow — "Mark as Ongoing":**
-- Third option alongside Mark Beaten / Mark Retired
-- No exit interview — just sets status to `ongoing`
-- Exit path from `ongoing` is still `retired` (with reason tags)
+`backburner` — games the user has explicitly pushed out of Now
+- Survives Steam sync (added to protected statuses — sync will not overwrite)
+- Now: excluded, even if playtime is above the threshold
+- Next: shown alongside unplayed games, optionally with a visual indicator
+- Flow: the "→ Next" quick action on Now cards sets this status (replaces the
+  current temporary `unplayed` approach which doesn't survive re-sync)
+- Exit: user can "Move to Now" to restore `in_progress`, or retire it
 
-**Auto-detection heuristic (optional):**
-- Surface games for user confirmation where HLTB returns null AND playtime is
-  above a threshold (e.g. 10h) — likely candidates for `ongoing` status
+**Now view threshold (already implemented in Phase 2):**
+- 60-minute default — games below this land in Next automatically
+- `backburner` status makes explicit user deferral persistent across syncs
+- Threshold constant lives in `queries.js` (`NOW_THRESHOLD_MINUTES`)
 
 ### Phase 4 — Taste Engine
 - Ollama integration (Qwen 2.5 14B)

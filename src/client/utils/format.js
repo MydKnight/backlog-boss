@@ -9,6 +9,11 @@ export function relativeDate(isoStr) {
   return `${Math.floor(days / 365)}y ago`;
 }
 
+export function formatEventDate(dateStr) {
+  if (!dateStr) return '';
+  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 export function hoursLabel(minutes) {
   if (!minutes) return '0h';
   const h = minutes / 60;
