@@ -100,11 +100,12 @@ The PWA must function offline for reading (guides, library, Done/History views).
 |---|---|
 | 1 | Docker setup, Steam sync, IGDB enrichment, HLTB lookup, DB schema |
 | 2 | React PWA, four views (Now/Next/Done/History), exit interview flows |
-| 3 | Ollama taste engine, suggestion ranking, Next view LLM integration |
-| 4 | Guide reader (URL ingest, Readability parse, offline storage, scroll position) |
-| 5 | Multi-user auth, per-user Steam keys, scoped queries |
+| 3 | Ongoing/infinite game type — `ongoing` status, "Always On" section, auto-detection |
+| 4 | Ollama taste engine, suggestion ranking, Next view LLM integration |
+| 5 | Guide reader (URL ingest, Readability parse, offline storage, scroll position) |
+| 6 | Multi-user auth, per-user Steam keys, scoped queries |
 
-**Current phase:** Start at Phase 1 unless instructed otherwise.
+**Current phase:** Phase 2 (in progress — on checkpoint 2.2).
 
 ---
 
@@ -169,22 +170,51 @@ The PWA must function offline for reading (guides, library, Done/History views).
 - [ ] Sync button in UI triggers backend sync
 - [ ] App is usable offline for browsing (no sync)
 
+#### Phase 2 Commit Decomposition
+Phase 2 is split into four tested-then-committed checkpoints:
+
+**2.1 — PWA scaffold + shell**
+React app boots, Tailwind wired, four tab views exist with placeholder content,
+PWA manifest in place, installable on mobile. No real data. Verify: loads on mobile.
+
+**2.2 — Now + Next views (read-only)**
+Backend API endpoints for in-progress and unplayed games. Now view renders with
+% complete sorting. Next view renders backlog list. Sync button works with real data.
+
+**2.3 — Mark Beaten + Mark Retired flows**
+Exit interview component, backend endpoints writing to `game_events` and
+`game_interviews`, status transitions in `user_games`. Done view shows results.
+
+**2.4 — History view**
+IGDB search endpoint + UI, manual game logging flow (lighter interview), logged
+games appear in Done/History.
+
 ### Phase 3 Done
+- [ ] `ongoing` status added to `user_games` status enum (DB migration safe — additive only)
+- [ ] "Mark as Ongoing" flow accessible from game detail (no interview, just status change)
+- [ ] Now view renders `ongoing` games in a separate "Always On" section without HLTB bar
+- [ ] Next view excludes `ongoing` games
+- [ ] Done view excludes `ongoing` games
+- [ ] Exit path from `ongoing` is `retired` (existing flow, no changes needed)
+- [ ] Auto-detection heuristic surfaces candidate games (HLTB null + playtime > 10h) for user confirmation
+
+### Phase 4 Done
 - [ ] Ollama integration service functional
 - [ ] Taste profile context builder assembles correct payload
+- [ ] `ongoing` games included as a signal category in the context payload
 - [ ] Snapshot generated and stored on demand
 - [ ] Next view displays LLM-ranked suggestions with explanations
 - [ ] "Refresh Suggestions" button triggers new snapshot if context changed
-- [ ] Retired games correctly excluded from candidates
+- [ ] Retired and ongoing games correctly excluded from candidates
 
-### Phase 4 Done
+### Phase 5 Done
 - [ ] Guide URL input per game
 - [ ] Server-side fetch + Readability parse
 - [ ] Guide stored locally, accessible offline
 - [ ] Mobile reader UI renders cleaned content
 - [ ] Scroll position persisted and restored on reopen
 
-### Phase 5 Done
+### Phase 6 Done
 - [ ] Auth layer (username/password minimum)
 - [ ] Per-user Steam API key storage
 - [ ] All queries scoped to authenticated user

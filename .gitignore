@@ -12,4 +12,4 @@ node_modules/
 Thumbs.db
 
 # Build output (Phase 2+)
-/src/client/dist/
+/dist/

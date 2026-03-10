@@ -131,27 +131,53 @@ No social feed, visibility flags, or shared data at any phase of this plan.
 
 ### Phase 2 — The Four Views
 - React PWA scaffold, mobile-first, Tailwind
-- Now view: in-progress games sorted by % complete (playtime ÷ HLTB)
-- Next view: backlog queue (static sort initially, taste engine wired in Phase 3)
+- Now view: in-progress games sorted by time-invested ratio (playtime ÷ HLTB), displayed as a progress bar — not labeled as "% complete" since HLTB is a population average, not a personal benchmark
+- Next view: backlog queue (static sort initially, taste engine wired in Phase 4)
 - Done view: completed game list with ratings
 - History view: search any game via IGDB, log it with rating and light interview
 - Manual sync button
 - "Mark beaten" and "Mark retired" flows with full exit interview
 
-### Phase 3 — Taste Engine
+### Phase 3 — Ongoing & Infinite Games
+Some games have no completion state — live service games (Path of Exile), app-driven
+board games (Mansions of Madness), sandboxes (Minecraft). The standard
+beaten/retired/unplayed model doesn't fit them.
+
+**Data model change:**
+- Add `ongoing` to the `status` enum on `user_games`
+- `ongoing` games are not in-progress toward a finish — they're permanently in rotation
+
+**Behavior by view:**
+- **Now**: `ongoing` games shown in a separate "Always On" section, no HLTB bar
+- **Next**: `ongoing` games excluded — they're already in rotation, not backlog
+- **Done**: `ongoing` games excluded — they're never "done"
+- **History/Taste engine**: playtime and last-played are still valid signals
+
+**New flow — "Mark as Ongoing":**
+- Third option alongside Mark Beaten / Mark Retired
+- No exit interview — just sets status to `ongoing`
+- Exit path from `ongoing` is still `retired` (with reason tags)
+
+**Auto-detection heuristic (optional):**
+- Surface games for user confirmation where HLTB returns null AND playtime is
+  above a threshold (e.g. 10h) — likely candidates for `ongoing` status
+
+### Phase 4 — Taste Engine
 - Ollama integration (Qwen 2.5 14B)
 - Taste profile context builder: assembles ratings, tags, notes, playtime signals
+- `ongoing` games included as a signal category in the context payload
 - Batch inference query + response parser
 - Next view updated to show LLM-ranked suggestions with explanations
-- "Kill it" (retire) flow wired to taste engine
+- "Refresh Suggestions" button triggers new snapshot if context changed
+- Retired and ongoing games correctly excluded from candidates
 
-### Phase 4 — Guide Reader
+### Phase 5 — Guide Reader
 - URL ingestion + Readability parsing
 - Local storage of cleaned guide content
 - Mobile reader UI with scroll position persistence
 - Offline access after first fetch
 
-### Phase 5 — Multi-User
+### Phase 6 — Multi-User
 - Auth layer
 - Per-user Steam API key storage
 - User-scoped all queries
@@ -166,3 +192,20 @@ No social feed, visibility flags, or shared data at any phase of this plan.
 - Chapter-level guide navigation
 - Real-time sync / websockets
 - Game price tracking or deal alerts
+
+---
+
+## Post-MVP Revisit: Now View Completion Signal
+
+The Now view currently uses playtime ÷ HLTB as a sorting proxy and progress bar,
+explicitly not labeled as "% complete" (HLTB is a population average, not personal).
+
+A better hybrid signal is worth revisiting after MVP:
+
+1. **Manual override** — user sets their own % on a per-game basis (`completion_pct_override` already in DB)
+2. **Achievement %** — fetch lazily from Steam where available; a real per-user signal for games that support it
+3. **Priority order:** manual override → achievement % → HLTB ratio (soft indicator only)
+
+The architecture already supports this: `completion_pct_override` is on `user_games`,
+and `fetchAchievementPct()` exists in `src/server/services/steam.js`. Wiring it up
+is a UI + lazy-fetch task, not a data model change.
