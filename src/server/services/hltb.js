@@ -281,6 +281,8 @@ export async function lookupHltbForAllGames(user) {
     const estMins = Math.ceil(total * 0.5 / 60);
     console.log(`HLTB: ${total} games to look up (~${estMins} min estimated)`);
 
+    let consecutiveEmpty = 0;
+
     for (let i = 0; i < games.length; i++) {
       const game = games[i];
 
@@ -290,15 +292,37 @@ export async function lookupHltbForAllGames(user) {
       }
 
       try {
-        const data = await fetchByTitle(game.title);
-        // Always set hltb_fetched_at — even null results — so we respect the 30-day TTL
-        updateGameFromHltb(game.id, data ?? { hltb_id: null, main: null, mainExtras: null, completionist: null });
-        if (data) gamesUpdated++;
+        const raw = await searchRaw(game.title);
+        const results = raw?.data ?? [];
+
+        if (results.length === 0) {
+          // Empty result could be throttling — don't set hltb_fetched_at so we retry next sync
+          consecutiveEmpty++;
+          console.warn(`HLTB: empty response for "${game.title}" (${consecutiveEmpty} consecutive) — skipping TTL mark`);
+
+          // Back off progressively when throttling is suspected
+          const backoff = consecutiveEmpty >= 5 ? 3000 : consecutiveEmpty >= 2 ? 1500 : 500;
+          await new Promise(r => setTimeout(r, backoff));
+          continue;
+        }
+
+        // Got results — reset throttle counter
+        consecutiveEmpty = 0;
+        const best = pickBestMatch(game.title, results);
+        const mapped = mapEntry(best);
+
+        // Only set TTL when HLTB actually responded — null here means genuine no match
+        updateGameFromHltb(game.id, mapped ?? { hltb_id: null, main: null, mainExtras: null, completionist: null });
+        if (mapped) gamesUpdated++;
+
       } catch (err) {
-        errors.push(`game id ${game.id} "${game.title}": ${err.message}`);
-        try {
-          updateGameFromHltb(game.id, { hltb_id: null, main: null, mainExtras: null, completionist: null });
-        } catch {}
+        const msg = `game id ${game.id} "${game.title}": ${err.message}`;
+        errors.push(msg);
+        // Log first 5 errors and every 50th so we can diagnose throttling/auth failures
+        if (errors.length <= 5 || errors.length % 50 === 0) {
+          console.error(`HLTB error (${errors.length} total): ${msg}`);
+        }
+        // Don't set hltb_fetched_at on exception — let it retry next sync
       }
 
       await new Promise(r => setTimeout(r, 500));

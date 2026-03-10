@@ -51,6 +51,14 @@
       "name": "HLTB Diagnostics",
       "item": [
         {
+          "name": "Reset HLTB Cache (retry throttled games)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/hltb/reset",
+            "description": "Clears hltb_fetched_at for all games with no HLTB data. Run this after a throttled sync, then run /api/sync again to retry those games."
+          }
+        },
+        {
           "name": "Test HLTB Lookup",
           "request": {
             "method": "GET",

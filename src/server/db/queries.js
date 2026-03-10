@@ -98,17 +98,17 @@ export function updateGameFromIgdb(steamAppId, { igdbId, title, coverUrl, genres
 /**
  * Update a games row with HLTB data.
  */
-export function updateGameFromHltb(gameId, { hltbId, main, mainExtras, completionist }) {
+export function updateGameFromHltb(gameId, { hltb_id, main, mainExtras, completionist }) {
   getDb().prepare(`
     UPDATE games SET
-      hltb_id            = :hltbId,
+      hltb_id            = :hltb_id,
       hltb_main          = :main,
       hltb_main_extras   = :mainExtras,
       hltb_completionist = :completionist,
       hltb_fetched_at    = CURRENT_TIMESTAMP,
       updated_at         = CURRENT_TIMESTAMP
     WHERE id = :gameId
-  `).run({ hltbId, main, mainExtras, completionist, gameId });
+  `).run({ hltb_id, main, mainExtras, completionist, gameId });
 }
 
 /**
@@ -125,6 +125,18 @@ export function getGamesNeedingIgdbEnrich() {
 /**
  * Games that need a fresh HLTB lookup (never fetched or cache expired).
  */
+/**
+ * Clear hltb_fetched_at for games with no HLTB data so the next sync retries them.
+ * Used to recover from a throttled batch run that marked games as fetched with no data.
+ */
+export function resetHltbFetchedAt() {
+  const result = getDb().prepare(`
+    UPDATE games SET hltb_fetched_at = NULL
+    WHERE hltb_fetched_at IS NOT NULL AND hltb_main_extras IS NULL
+  `).run();
+  return result.changes;
+}
+
 export function getGamesNeedingHltbLookup() {
   return getDb().prepare(`
     SELECT * FROM games
