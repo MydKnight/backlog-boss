@@ -11,6 +11,7 @@ import syncRouter from './routes/sync.js';
 import igdbRouter from './routes/igdb.js';
 import hltbRouter from './routes/hltb.js';
 import gamesRouter from './routes/games.js';
+import tasteRouter from './routes/taste.js';
 
 const PORT = process.env.PORT || 3000;
 
@@ -62,6 +63,8 @@ app.get('/api/health', (req, res) => {
     status: 'ok',
     user: user ? { id: user.id, username: user.username } : null,
     steamConfigured: !!(user?.steam_api_key && user?.steam_id),
+    ollamaEndpoint: user?.ollama_endpoint ?? null,
+    ollamaModel: user?.ollama_model ?? null,
   });
 });
 
@@ -69,6 +72,7 @@ app.use('/api/sync', syncRouter);
 app.use('/api/igdb', igdbRouter);
 app.use('/api/hltb', hltbRouter);
 app.use('/api/games', gamesRouter);
+app.use('/api/taste', tasteRouter);
 
 // Serve built React app (production / Docker)
 const distPath = join(__dirname, '../../dist');

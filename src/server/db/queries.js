@@ -613,3 +613,116 @@ export function getRecentSyncLogs(userId, limit = 10) {
     LIMIT ?
   `).all(userId, limit);
 }
+
+// ---------------------------------------------------------------------------
+// Taste Snapshots
+// ---------------------------------------------------------------------------
+
+/**
+ * Get the most recent taste snapshot for a user.
+ */
+export function getLatestTasteSnapshot(userId) {
+  return getDb().prepare(`
+    SELECT * FROM taste_snapshots
+    WHERE user_id = ?
+    ORDER BY generated_at DESC
+    LIMIT 1
+  `).get(userId);
+}
+
+/**
+ * Save a new taste snapshot. Keeps only the last 5 snapshots per user
+ * (older ones are deleted) to avoid unbounded growth.
+ * @param {number} userId
+ * @param {{ modelUsed: string, contextHash: string, suggestions: object[] }} payload
+ */
+export function saveTasteSnapshot(userId, { modelUsed, contextHash, suggestions }) {
+  const db = getDb();
+  db.prepare(`
+    INSERT INTO taste_snapshots (user_id, model_used, context_hash, suggestions)
+    VALUES (:userId, :modelUsed, :contextHash, :suggestions)
+  `).run({
+    userId,
+    modelUsed,
+    contextHash,
+    suggestions: JSON.stringify(suggestions),
+  });
+
+  // Prune old snapshots — keep only the 5 most recent
+  db.prepare(`
+    DELETE FROM taste_snapshots
+    WHERE user_id = ?
+      AND id NOT IN (
+        SELECT id FROM taste_snapshots
+        WHERE user_id = ?
+        ORDER BY generated_at DESC
+        LIMIT 5
+      )
+  `).run(userId, userId);
+}
+
+/**
+ * Assemble the full taste profile context for a user.
+ * This is what gets sent to Ollama as the basis for ranking candidate games.
+ *
+ * Returns four arrays:
+ *   completedGames  — games beaten with ratings and tags (strongest positive signal)
+ *   retiredGames    — games abandoned with reason tags (negative/avoidance signal)
+ *   inProgressGames — currently playing (for context, not ranking)
+ *   candidateGames  — unplayed + backburner games to be ranked
+ */
+export function getTasteContext(userId) {
+  const db = getDb();
+
+  // Completed games — join game_events + game_interviews + games
+  const completedGames = db.prepare(`
+    SELECT
+      g.title, g.genres, g.themes,
+      ge.star_rating,
+      gi.positive_tags, gi.negative_tags, gi.free_text
+    FROM game_events ge
+    JOIN games g ON g.igdb_id = ge.igdb_id
+    LEFT JOIN game_interviews gi ON gi.game_event_id = ge.id
+    WHERE ge.user_id = :userId AND ge.event_type = 'completed'
+    ORDER BY ge.event_date DESC
+  `).all({ userId });
+
+  // Retired games
+  const retiredGames = db.prepare(`
+    SELECT
+      g.title, g.genres, g.themes,
+      gi.negative_tags, gi.free_text
+    FROM game_events ge
+    JOIN games g ON g.igdb_id = ge.igdb_id
+    LEFT JOIN game_interviews gi ON gi.game_event_id = ge.id
+    WHERE ge.user_id = :userId AND ge.event_type = 'retired'
+    ORDER BY ge.event_date DESC
+  `).all({ userId });
+
+  // In-progress games (context only — already being played)
+  const inProgressGames = db.prepare(`
+    SELECT
+      g.title, g.genres,
+      ug.playtime_minutes, g.hltb_main_extras, g.hltb_main
+    FROM user_games ug
+    JOIN games g ON g.igdb_id = ug.igdb_id
+    WHERE ug.user_id = :userId AND ug.status IN ('in_progress', 'ongoing')
+      AND ug.playtime_minutes >= 60
+    ORDER BY ug.playtime_minutes DESC
+  `).all({ userId });
+
+  // Candidate games — unplayed + backburner, these get ranked
+  const candidateGames = db.prepare(`
+    SELECT
+      g.igdb_id, g.title, g.genres, g.themes,
+      g.hltb_main_extras, g.hltb_main,
+      ug.playtime_minutes, ug.status
+    FROM user_games ug
+    JOIN games g ON g.igdb_id = ug.igdb_id
+    WHERE ug.user_id = :userId
+      AND ug.status IN ('unplayed', 'backburner')
+    ORDER BY g.title ASC
+  `).all({ userId });
+
+  return { completedGames, retiredGames, inProgressGames, candidateGames };
+}
