@@ -5,12 +5,23 @@ import { useState, useEffect } from 'react';
  * @param {string} url
  * @returns {{ data: any, loading: boolean, error: string|null }}
  */
+/**
+ * Simple fetch hook. Pass null as url to skip fetching.
+ * Re-fetches whenever `url` changes.
+ */
 export function useApi(url) {
   const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!!url);
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    if (!url) {
+      setData(null);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
     const controller = new AbortController();
     setLoading(true);
     setError(null);

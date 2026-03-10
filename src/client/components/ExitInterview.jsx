@@ -32,6 +32,7 @@ export default function ExitInterview({ game, type, onSubmit, onClose }) {
   const [submitting, setSubmitting] = useState(false);
 
   const isBeaten = type === 'beaten';
+  const isHistory = type === 'history';
   const canSubmit = isBeaten ? starRating > 0 : true;
 
   function toggleTag(list, setList, id) {
@@ -57,7 +58,7 @@ export default function ExitInterview({ game, type, onSubmit, onClose }) {
         <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-slate-800 shrink-0">
           <div>
             <p className="text-xs text-slate-500 uppercase tracking-wider mb-0.5">
-              {isBeaten ? 'Mark Beaten' : 'Mark Retired'}
+              {isBeaten ? 'Mark Beaten' : isHistory ? 'Log to History' : 'Mark Retired'}
             </p>
             <p className="font-semibold text-slate-100 line-clamp-1">{game.title}</p>
           </div>
@@ -67,32 +68,38 @@ export default function ExitInterview({ game, type, onSubmit, onClose }) {
         {/* Scrollable body */}
         <div className="overflow-y-auto px-4 py-4 flex flex-col gap-5">
 
-          {/* Star rating — beaten only */}
-          {isBeaten && (
+          {/* Star rating — beaten (required) or history (optional) */}
+          {(isBeaten || isHistory) && (
             <div>
               <p className="text-sm font-medium text-slate-300 mb-3">
-                How would you rate it? <span className="text-red-400">*</span>
+                How would you rate it?
+                {isBeaten
+                  ? <span className="text-red-400"> *</span>
+                  : <span className="text-slate-500"> (optional)</span>
+                }
               </p>
               <StarRating value={starRating} onChange={setStarRating} />
             </div>
           )}
 
-          {/* Positive tags — beaten only */}
-          {isBeaten && (
+          {/* Positive tags — beaten and history */}
+          {(isBeaten || isHistory) && (
             <div>
               <p className="text-sm font-medium text-slate-300 mb-2">What stood out? <span className="text-slate-500">(optional)</span></p>
               <TagPills tags={POSITIVE_TAGS} selected={positiveTags} onToggle={id => toggleTag(positiveTags, setPositiveTags, id)} />
             </div>
           )}
 
-          {/* Negative / reason tags */}
-          <div>
-            <p className="text-sm font-medium text-slate-300 mb-2">
-              {isBeaten ? 'Any downsides?' : 'Why are you stepping away?'}
-              {' '}<span className="text-slate-500">(optional)</span>
-            </p>
-            <TagPills tags={NEGATIVE_TAGS} selected={negativeTags} onToggle={id => toggleTag(negativeTags, setNegativeTags, id)} />
-          </div>
+          {/* Negative / reason tags — beaten and retired only */}
+          {!isHistory && (
+            <div>
+              <p className="text-sm font-medium text-slate-300 mb-2">
+                {isBeaten ? 'Any downsides?' : 'Why are you stepping away?'}
+                {' '}<span className="text-slate-500">(optional)</span>
+              </p>
+              <TagPills tags={NEGATIVE_TAGS} selected={negativeTags} onToggle={id => toggleTag(negativeTags, setNegativeTags, id)} />
+            </div>
+          )}
 
           {/* Free text */}
           <div>
@@ -100,7 +107,7 @@ export default function ExitInterview({ game, type, onSubmit, onClose }) {
             <textarea
               value={freeText}
               onChange={e => setFreeText(e.target.value)}
-              placeholder={isBeaten ? 'Thoughts, memories, recommendations…' : 'What happened?'}
+              placeholder={isHistory ? 'What do you remember about it?' : isBeaten ? 'Thoughts, memories, recommendations…' : 'What happened?'}
               rows={3}
               className="w-full bg-slate-800 text-slate-100 placeholder-slate-600 rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-indigo-500"
             />

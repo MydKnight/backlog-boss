@@ -281,6 +281,118 @@ export function markGameRetired(userId, igdbId, { negativeTags, freeText }) {
 }
 
 /**
+ * Add a non-Steam game to Now (currently playing on another platform).
+ * Creates user_games with in_progress status and the given ownership_type.
+ * If a row already exists, updates ownership_type and status only if not protected.
+ */
+export function addCurrentlyPlaying(userId, igdbId, { ownershipType, playtimeMinutes }) {
+  const db = getDb();
+  const existing = db.prepare(
+    'SELECT status FROM user_games WHERE user_id = :userId AND igdb_id = :igdbId'
+  ).get({ userId, igdbId });
+
+  const protectedStatuses = ['completed', 'retired'];
+
+  if (existing) {
+    if (!protectedStatuses.includes(existing.status)) {
+      db.prepare(`
+        UPDATE user_games SET
+          status = 'in_progress',
+          ownership_type = :ownershipType,
+          playtime_minutes = :playtimeMinutes,
+          playtime_source = 'manual',
+          updated_at = CURRENT_TIMESTAMP
+        WHERE user_id = :userId AND igdb_id = :igdbId
+      `).run({ userId, igdbId, ownershipType, playtimeMinutes: playtimeMinutes ?? 0 });
+    }
+  } else {
+    db.prepare(`
+      INSERT INTO user_games
+        (user_id, igdb_id, ownership_type, status, playtime_minutes, playtime_source)
+      VALUES
+        (:userId, :igdbId, :ownershipType, 'in_progress', :playtimeMinutes, 'manual')
+    `).run({ userId, igdbId, ownershipType, playtimeMinutes: playtimeMinutes ?? 0 });
+  }
+}
+
+/**
+ * Insert a game record sourced directly from IGDB (not via Steam sync).
+ * Uses INSERT OR IGNORE so existing records are never overwritten.
+ */
+export function upsertGameFromIgdb({ igdbId, title, coverUrl, genres, themes, similarIgdbIds }) {
+  getDb().prepare(`
+    INSERT OR IGNORE INTO games
+      (igdb_id, title, cover_url, genres, themes, similar_igdb_ids, igdb_fetched_at)
+    VALUES
+      (:igdbId, :title, :coverUrl, :genres, :themes, :similarIgdbIds, CURRENT_TIMESTAMP)
+  `).run({
+    igdbId,
+    title,
+    coverUrl: coverUrl ?? null,
+    genres: JSON.stringify(genres ?? []),
+    themes: JSON.stringify(themes ?? []),
+    similarIgdbIds: JSON.stringify(similarIgdbIds ?? []),
+  });
+}
+
+/**
+ * Log a game to History. Creates a user_games row (historical ownership) if one
+ * doesn't exist, then writes game_events + game_interviews in a transaction.
+ */
+export function logHistoryGame(userId, igdbId, { starRating, positiveTags, freeText }) {
+  const db = getDb();
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    db.prepare(`
+      INSERT OR IGNORE INTO user_games
+        (user_id, igdb_id, ownership_type, status, playtime_source)
+      VALUES
+        (:userId, :igdbId, 'historical', 'historical', 'manual')
+    `).run({ userId, igdbId });
+
+    const event = db.prepare(`
+      INSERT INTO game_events (user_id, igdb_id, event_type, star_rating)
+      VALUES (:userId, :igdbId, 'completed', :starRating)
+    `).run({ userId, igdbId, starRating: starRating ?? null });
+
+    db.prepare(`
+      INSERT INTO game_interviews
+        (user_id, game_event_id, igdb_id, interview_type, positive_tags, free_text)
+      VALUES
+        (:userId, :eventId, :igdbId, 'history', :positiveTags, :freeText)
+    `).run({
+      userId,
+      eventId: event.lastInsertRowid,
+      igdbId,
+      positiveTags: JSON.stringify(positiveTags ?? []),
+      freeText: freeText ?? null,
+    });
+
+    db.exec('COMMIT');
+  } catch (err) {
+    try { db.exec('ROLLBACK'); } catch {}
+    throw err;
+  }
+}
+
+/**
+ * All played games (beaten, retired, or manually logged history), sorted by most recently logged.
+ */
+export function getHistoryGames(userId) {
+  return getDb().prepare(`
+    SELECT
+      g.id, g.igdb_id, g.title, g.cover_url,
+      ge.id as event_id, ge.event_type, ge.star_rating, ge.event_date,
+      gi.positive_tags, gi.negative_tags, gi.free_text
+    FROM game_events ge
+    JOIN games g ON g.igdb_id = ge.igdb_id
+    LEFT JOIN game_interviews gi ON gi.game_event_id = ge.id AND gi.user_id = :userId
+    WHERE ge.user_id = :userId
+    ORDER BY ge.event_date DESC
+  `).all({ userId });
+}
+
+/**
  * Revert a completed or retired game back to in_progress.
  * Leaves game_events and game_interviews intact — history is preserved.
  */

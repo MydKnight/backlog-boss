@@ -164,7 +164,7 @@ The PWA must function offline for reading (guides, library, Done/History views).
 - [ ] Now view shows in-progress games sorted by estimated % complete
 - [ ] Next view shows unplayed games (unsorted at this phase)
 - [ ] Done view shows completed games with ratings
-- [ ] History view allows IGDB search and game logging
+- [ ] History view: IGDB search with "Log to History" (light interview) and "Currently Playing" (platform picker → ownership_type, lands in Now)
 - [ ] "Mark Beaten" flow with full exit interview
 - [ ] "Mark Retired" flow with reason tags and optional notes
 - [ ] Sync button in UI triggers backend sync
@@ -207,6 +207,8 @@ games appear in Done/History.
 - [ ] Ollama integration service functional
 - [ ] Taste profile context builder assembles correct payload
 - [ ] `ongoing` and `backburner` games handled correctly in context payload
+- [ ] Custom tag input added to exit interviews (free-form, stored in existing JSON arrays)
+- [ ] LLM prompt handles both predefined tag vocabulary and custom tags
 - [ ] Snapshot generated and stored on demand
 - [ ] Next view displays LLM-ranked suggestions with explanations
 - [ ] "Refresh Suggestions" button triggers new snapshot if context changed

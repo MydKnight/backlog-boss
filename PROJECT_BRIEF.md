@@ -134,7 +134,10 @@ No social feed, visibility flags, or shared data at any phase of this plan.
 - Now view: in-progress games sorted by time-invested ratio (playtime ÷ HLTB), displayed as a progress bar — not labeled as "% complete" since HLTB is a population average, not a personal benchmark
 - Next view: backlog queue (static sort initially, taste engine wired in Phase 4)
 - Done view: completed game list with ratings
-- History view: search any game via IGDB, log it with rating and light interview
+- History view: search any game via IGDB with two actions:
+  - "Log to History" — game already played/finished, light interview (rating optional)
+  - "Currently Playing" — non-Steam game in active play, platform picker sets ownership_type
+    (owned_ps5 / owned_switch / owned_other), optional manual playtime, lands in Now view
 - Manual sync button
 - "Mark beaten" and "Mark retired" flows with full exit interview
 
@@ -169,11 +172,16 @@ makes the Now view threshold a reliable curation tool.
 ### Phase 4 — Taste Engine
 - Ollama integration (Qwen 2.5 14B)
 - Taste profile context builder: assembles ratings, tags, notes, playtime signals
-- `ongoing` games included as a signal category in the context payload
+- `ongoing` and `backburner` games handled correctly in context payload
 - Batch inference query + response parser
 - Next view updated to show LLM-ranked suggestions with explanations
 - "Refresh Suggestions" button triggers new snapshot if context changed
 - Retired and ongoing games correctly excluded from candidates
+- **Custom tags on exit interviews:** free-form tag input alongside predefined
+  pills; custom tags stored in the same positive_tags/negative_tags JSON arrays
+  (schema already supports arbitrary strings); LLM prompt designed to interpret
+  both predefined and custom vocabulary — deferred from Phase 2 so prompt design
+  and tag handling are built together
 
 ### Phase 5 — Guide Reader
 - URL ingestion + Readability parsing

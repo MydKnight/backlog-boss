@@ -7,6 +7,10 @@ import {
   markGameBeaten,
   markGameRetired,
   revertGameToInProgress,
+  upsertGameFromIgdb,
+  logHistoryGame,
+  getHistoryGames,
+  addCurrentlyPlaying,
 } from '../db/queries.js';
 
 const router = Router();
@@ -111,6 +115,74 @@ router.post('/:igdbId/retired', (req, res) => {
 
   try {
     markGameRetired(user.id, igdbId, { negativeTags, freeText });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/games/history
+ * All history-interview entries, sorted by most recently logged.
+ */
+router.get('/history', (req, res) => {
+  const user = getDefaultUser();
+  if (!user) return res.status(500).json({ error: 'No user configured.' });
+
+  const games = getHistoryGames(user.id).map(g => ({
+    igdb_id: g.igdb_id,
+    title: g.title,
+    cover_url: g.cover_url ?? null,
+    event_type: g.event_type ?? null,
+    star_rating: g.star_rating ?? null,
+    event_date: g.event_date ?? null,
+    positive_tags: g.positive_tags ? JSON.parse(g.positive_tags) : [],
+    negative_tags: g.negative_tags ? JSON.parse(g.negative_tags) : [],
+    free_text: g.free_text ?? null,
+  }));
+
+  res.json({ games });
+});
+
+/**
+ * POST /api/games/history
+ * Log a previously played game. Body: { igdbData, starRating, positiveTags, freeText }
+ */
+router.post('/history', (req, res) => {
+  const user = getDefaultUser();
+  if (!user) return res.status(500).json({ error: 'No user configured.' });
+
+  const { igdbData, starRating, positiveTags, freeText } = req.body;
+  if (!igdbData?.igdbId) return res.status(400).json({ error: 'igdbData.igdbId required' });
+
+  try {
+    upsertGameFromIgdb(igdbData);
+    logHistoryGame(user.id, igdbData.igdbId, { starRating, positiveTags, freeText });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/games/currently-playing
+ * Add a non-Steam game to Now. Body: { igdbData, ownershipType, playtimeMinutes }
+ */
+router.post('/currently-playing', (req, res) => {
+  const user = getDefaultUser();
+  if (!user) return res.status(500).json({ error: 'No user configured.' });
+
+  const { igdbData, ownershipType, playtimeMinutes } = req.body;
+  if (!igdbData?.igdbId) return res.status(400).json({ error: 'igdbData.igdbId required' });
+
+  const validTypes = ['owned_ps5', 'owned_switch', 'owned_other'];
+  if (!validTypes.includes(ownershipType)) {
+    return res.status(400).json({ error: `ownershipType must be one of: ${validTypes.join(', ')}` });
+  }
+
+  try {
+    upsertGameFromIgdb(igdbData);
+    addCurrentlyPlaying(user.id, igdbData.igdbId, { ownershipType, playtimeMinutes });
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
