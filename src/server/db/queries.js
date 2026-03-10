@@ -137,6 +137,45 @@ export function resetHltbFetchedAt() {
   return result.changes;
 }
 
+/**
+ * In-progress games for the Now view, sorted by % complete descending.
+ */
+export function getInProgressGames(userId) {
+  return getDb().prepare(`
+    SELECT
+      g.id, g.igdb_id, g.title, g.cover_url, g.genres,
+      g.hltb_main, g.hltb_main_extras,
+      ug.playtime_minutes, ug.last_played_at, ug.completion_pct_override
+    FROM user_games ug
+    JOIN games g ON g.igdb_id = ug.igdb_id
+    WHERE ug.user_id = :userId AND ug.status = 'in_progress'
+    ORDER BY
+      CASE
+        WHEN g.hltb_main_extras IS NOT NULL
+          THEN CAST(ug.playtime_minutes AS REAL) / (g.hltb_main_extras * 60)
+        WHEN g.hltb_main IS NOT NULL
+          THEN CAST(ug.playtime_minutes AS REAL) / (g.hltb_main * 60)
+        ELSE 0
+      END DESC
+  `).all({ userId });
+}
+
+/**
+ * Unplayed games for the Next view, sorted alphabetically.
+ */
+export function getUnplayedGames(userId) {
+  return getDb().prepare(`
+    SELECT
+      g.id, g.igdb_id, g.title, g.cover_url, g.genres,
+      g.hltb_main, g.hltb_main_extras,
+      ug.playtime_minutes
+    FROM user_games ug
+    JOIN games g ON g.igdb_id = ug.igdb_id
+    WHERE ug.user_id = :userId AND ug.status = 'unplayed'
+    ORDER BY g.title ASC
+  `).all({ userId });
+}
+
 export function getGamesNeedingHltbLookup() {
   return getDb().prepare(`
     SELECT * FROM games

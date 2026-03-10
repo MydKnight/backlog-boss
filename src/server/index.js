@@ -1,10 +1,16 @@
 import 'dotenv/config';
 import express from 'express';
+import { fileURLToPath } from 'node:url';
+import { join, dirname } from 'node:path';
+import { existsSync } from 'node:fs';
 import { getDb } from './db/schema.js';
 import { getDefaultUser, createDefaultUser } from './db/queries.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 import syncRouter from './routes/sync.js';
 import igdbRouter from './routes/igdb.js';
 import hltbRouter from './routes/hltb.js';
+import gamesRouter from './routes/games.js';
 
 const PORT = process.env.PORT || 3000;
 
@@ -62,8 +68,20 @@ app.get('/api/health', (req, res) => {
 app.use('/api/sync', syncRouter);
 app.use('/api/igdb', igdbRouter);
 app.use('/api/hltb', hltbRouter);
+app.use('/api/games', gamesRouter);
 
-// 404 fallback
+// Serve built React app (production / Docker)
+const distPath = join(__dirname, '../../dist');
+if (existsSync(distPath)) {
+  app.use(express.static(distPath));
+  // SPA fallback — all non-API routes return index.html
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/api/')) return next();
+    res.sendFile(join(distPath, 'index.html'));
+  });
+}
+
+// 404 fallback (API routes only in production; all routes in dev)
 app.use((req, res) => {
   res.status(404).json({ error: `No route: ${req.method} ${req.path}` });
 });
