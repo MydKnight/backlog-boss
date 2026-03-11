@@ -179,6 +179,12 @@ export function initSchema(db) {
     console.log('Migration: added ollama_embed_model to users');
   }
 
+  // IGDB ignore flag — marks unresolvable games (DLC, test servers, duplicates)
+  if (!gamesCols.includes('igdb_ignored')) {
+    db.exec("ALTER TABLE games ADD COLUMN igdb_ignored INTEGER NOT NULL DEFAULT 0");
+    console.log('Migration: added igdb_ignored to games');
+  }
+
   // Guide content type + parse warning
   const guidesCols = db.prepare("PRAGMA table_info(guides)").all().map(c => c.name);
   if (!guidesCols.includes('content_type')) {

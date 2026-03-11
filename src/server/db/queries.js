@@ -68,10 +68,10 @@ export function updateGameFromIgdb(steamAppId, { igdbId, title, coverUrl, genres
 
   // Guard: if this igdb_id already belongs to a different steam_app_id, skip
   const conflict = db.prepare(
-    'SELECT steam_app_id FROM games WHERE igdb_id = ? AND steam_app_id != ?'
+    'SELECT steam_app_id, title FROM games WHERE igdb_id = ? AND steam_app_id != ?'
   ).get(igdbId, steamAppId);
 
-  if (conflict) return; // duplicate — leave this steam entry without an igdb_id
+  if (conflict) return { ok: false, conflict }; // duplicate — leave this steam entry without an igdb_id
 
   db.prepare(`
     UPDATE games SET
@@ -905,4 +905,43 @@ export function updateGuideScroll(userId, guideId, scrollPosition) {
 
 export function deleteGuide(userId, guideId) {
   getDb().prepare('DELETE FROM guides WHERE id = ? AND user_id = ?').run(guideId, userId);
+}
+
+// ---------------------------------------------------------------------------
+// Admin — Data Quality
+// ---------------------------------------------------------------------------
+
+/**
+ * User's owned games that have an IGDB match but no HLTB completion times.
+ */
+export function getGamesWithoutHltb(userId) {
+  return getDb().prepare(`
+    SELECT g.id, g.igdb_id, g.title, g.cover_url, g.hltb_fetched_at
+    FROM games g
+    JOIN user_games ug ON ug.igdb_id = g.igdb_id
+    WHERE ug.user_id = ?
+      AND g.hltb_id IS NULL
+    ORDER BY g.title
+  `).all(userId);
+}
+
+/**
+ * Steam games that never matched an IGDB record.
+ * No user_games row exists for these — global table scan.
+ */
+export function getGamesWithoutIgdb() {
+  return getDb().prepare(`
+    SELECT id, steam_app_id, title
+    FROM games
+    WHERE igdb_id IS NULL
+      AND steam_app_id IS NOT NULL
+      AND igdb_ignored = 0
+    ORDER BY title
+  `).all();
+}
+
+export function setIgdbIgnored(gameId, ignored) {
+  getDb().prepare(`
+    UPDATE games SET igdb_ignored = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+  `).run(ignored ? 1 : 0, gameId);
 }

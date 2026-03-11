@@ -13,6 +13,7 @@ import hltbRouter from './routes/hltb.js';
 import gamesRouter from './routes/games.js';
 import tasteRouter from './routes/taste.js';
 import guidesRouter from './routes/guides.js';
+import adminRouter from './routes/admin.js';
 
 const PORT = process.env.PORT || 3000;
 
@@ -75,6 +76,7 @@ app.use('/api/hltb', hltbRouter);
 app.use('/api/games', gamesRouter);
 app.use('/api/taste', tasteRouter);
 app.use('/api/guides', guidesRouter);
+app.use('/api/admin', adminRouter);
 
 // Serve built React app (production / Docker)
 const distPath = join(__dirname, '../../dist');
