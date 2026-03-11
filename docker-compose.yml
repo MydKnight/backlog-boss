@@ -1,15 +1,22 @@
-version: '3.8'
 services:
   backlog-boss:
     image: backlog-boss:latest
     container_name: backlog-boss
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3005:3000"
     volumes:
-      - /share/Container/backlog-boss/data:/app/data
-      - /share/Container/backlog-boss/.env:/app/.env
+      - ${DOCKERDIR}/appdata/backlog-boss:/app/data
     environment:
       - NODE_ENV=production
+      - STEAM_API_KEY=${STEAM_API_KEY}
+      - STEAM_ID=${STEAM_ID}
+      - IGDB_CLIENT_ID=${IGDB_CLIENT_ID}
+      - IGDB_CLIENT_SECRET=${IGDB_CLIENT_SECRET}
+      - OLLAMA_ENDPOINT=http://host.docker.internal:11434
+      - OLLAMA_MODEL=qwen2.5:14b
+      - OLLAMA_EMBED_MODEL=nomic-embed-text
+      - DATABASE_PATH=./data/backlog.db
+      - OWNER_EMAIL=${OWNER_EMAIL}
     extra_hosts:
       - "host.docker.internal:host-gateway"
