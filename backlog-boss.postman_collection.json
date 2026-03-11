@@ -204,6 +204,14 @@
           }
         },
         {
+          "name": "Debug Key Extraction",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/hltb/debug-key",
+            "description": "Diagnostic: runs the HLTB search key extraction logic and returns the raw result. Use if HLTB lookups are returning unexpected results."
+          }
+        },
+        {
           "name": "Test HLTB Lookup",
           "request": {
             "method": "GET",
@@ -225,8 +233,133 @@
       ]
     },
     {
+      "name": "Taste Engine",
+      "item": [
+        {
+          "name": "Health Check (both models)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/taste/health",
+            "description": "Checks both Ollama models: inference model (qwen2.5:14b) for explanations, and embed model (nomic-embed-text) for ranking. Both must be available before running embed-games or refresh."
+          }
+        },
+        {
+          "name": "Step 1 — Embed All Games",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/taste/embed-games",
+            "description": "ONE-TIME SETUP (then incremental). Generates and stores embedding vectors for all games using nomic-embed-text. Returns immediately — poll GET /api/taste/embed-status for progress. First run: ~1-2s per game (30-40 min for 1300 games). Subsequent runs: only new games are embedded."
+          }
+        },
+        {
+          "name": "Step 1 — Embed Status (poll this)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/taste/embed-status",
+            "description": "Returns embedding job progress: status, progress/total counts, percentComplete, elapsedSeconds. Poll until status is 'done' before running refresh."
+          }
+        },
+        {
+          "name": "Step 1 — Cancel Embed Job",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/taste/cancel-embed",
+            "description": "Abort a running embed job. Safe to resume later — already-embedded games are stored and won't be re-processed."
+          }
+        },
+        {
+          "name": "Step 2 — Refresh Suggestions",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/taste/refresh",
+            "description": "Kicks off background taste inference: embeds taste profile → cosine similarity ranks entire library → LLM explains top 15 individually. Returns immediately. Poll GET /api/taste/status. When ready, fetch GET /api/taste/snapshot."
+          }
+        },
+        {
+          "name": "Step 2 — Force Refresh",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/taste/refresh?force=true",
+              "host": ["{{base_url}}"],
+              "path": ["api", "taste", "refresh"],
+              "query": [{ "key": "force", "value": "true" }]
+            },
+            "description": "Force a new inference run even if context hash hasn't changed."
+          }
+        },
+        {
+          "name": "Step 2 — Inference Status (poll this)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/taste/status",
+            "description": "Returns inference job state: 'idle' | 'generating' | 'ready' | 'failed'. tokensGenerated increases while LLM is writing explanations — use as liveness signal."
+          }
+        },
+        {
+          "name": "Step 2 — Cancel Inference",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/taste/cancel",
+            "description": "Abort a running inference job."
+          }
+        },
+        {
+          "name": "Step 3 — Get Snapshot",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/taste/snapshot",
+            "description": "Returns the most recent cached suggestion snapshot. Fetch this after status is 'ready'. Each suggestion includes igdb_id, title, rank, explanation, and similarity score."
+          }
+        },
+        {
+          "name": "Test Explanation (3 games, fast)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/taste/test-prompt",
+            "description": "Tests the per-game explanation prompt against 3 candidates. Returns profileSummary and per-game explanations. Fast (~30s). Use to iterate on explanation quality."
+          }
+        },
+        {
+          "name": "Context Preview",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/taste/context-preview",
+            "description": "Shows completed/retired/in-progress counts and total eligible candidate count. No inference."
+          }
+        },
+        {
+          "name": "Snooze Suggestion",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/taste/snooze/{{igdb_id}}",
+            "description": "Dismiss a game from suggestions for 30 days. Re-enters candidate pool automatically after 30 days."
+          }
+        }
+      ]
+    },
+    {
       "name": "IGDB Diagnostics",
       "item": [
+        {
+          "name": "Raw Lookup by Steam App ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/igdb/raw-lookup?appid=400",
+              "host": ["{{base_url}}"],
+              "path": ["api", "igdb", "raw-lookup"],
+              "query": [
+                {
+                  "key": "appid",
+                  "value": "400",
+                  "description": "Steam App ID (400 = Portal)"
+                }
+              ]
+            },
+            "description": "Diagnostic: returns the full raw IGDB API response for a Steam App ID, before any mapping or transformation. Use to inspect the raw IGDB data shape."
+          }
+        },
         {
           "name": "Lookup by Steam App ID",
           "request": {

@@ -72,6 +72,8 @@ export function initSchema(db) {
       completion_pct_override REAL,
       steam_synced_at       DATETIME,
       added_at              DATETIME DEFAULT CURRENT_TIMESTAMP,
+      taste_boost           INTEGER NOT NULL DEFAULT 0,
+      snoozed_until         DATETIME,
       created_at            DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at            DATETIME DEFAULT CURRENT_TIMESTAMP
     );
@@ -142,4 +144,38 @@ export function initSchema(db) {
     CREATE INDEX IF NOT EXISTS idx_taste_snapshots_user ON taste_snapshots(user_id, generated_at DESC);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_user_games_unique ON user_games(user_id, igdb_id);
   `);
+
+  // Additive migrations — safe to run on every startup, ALTER TABLE IF NOT EXISTS
+  // equivalent: check if column exists before adding it.
+  const userGamesCols = db.prepare("PRAGMA table_info(user_games)").all().map(c => c.name);
+  if (!userGamesCols.includes('taste_boost')) {
+    db.exec("ALTER TABLE user_games ADD COLUMN taste_boost INTEGER NOT NULL DEFAULT 0");
+    console.log('Migration: added taste_boost to user_games');
+  }
+  if (!userGamesCols.includes('snoozed_until')) {
+    db.exec("ALTER TABLE user_games ADD COLUMN snoozed_until DATETIME");
+    console.log('Migration: added snoozed_until to user_games');
+  }
+
+  // Embedding columns on games — store vector as JSON float array
+  const gamesCols = db.prepare("PRAGMA table_info(games)").all().map(c => c.name);
+  if (!gamesCols.includes('embedding')) {
+    db.exec("ALTER TABLE games ADD COLUMN embedding TEXT");
+    console.log('Migration: added embedding to games');
+  }
+  if (!gamesCols.includes('embedding_model')) {
+    db.exec("ALTER TABLE games ADD COLUMN embedding_model TEXT");
+    console.log('Migration: added embedding_model to games');
+  }
+  if (!gamesCols.includes('embedding_fetched_at')) {
+    db.exec("ALTER TABLE games ADD COLUMN embedding_fetched_at DATETIME");
+    console.log('Migration: added embedding_fetched_at to games');
+  }
+
+  // Embedding model config on users
+  const usersCols = db.prepare("PRAGMA table_info(users)").all().map(c => c.name);
+  if (!usersCols.includes('ollama_embed_model')) {
+    db.exec("ALTER TABLE users ADD COLUMN ollama_embed_model TEXT NOT NULL DEFAULT 'nomic-embed-text'");
+    console.log('Migration: added ollama_embed_model to users');
+  }
 }

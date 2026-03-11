@@ -11,8 +11,6 @@
  * host.docker.internal instead of localhost.
  */
 
-const TIMEOUT_MS = 120_000; // 2 minutes — generous for cold 14B model start
-
 /**
  * Check whether Ollama is reachable and the configured model is available.
  * @param {string} endpoint  e.g. 'http://localhost:11434'
@@ -43,24 +41,22 @@ export async function checkOllamaHealth(endpoint, model) {
 }
 
 /**
- * Run a single inference against Ollama.
+ * Run inference against Ollama using streaming mode.
  *
- * We use the /api/generate endpoint (not /api/chat) because we're doing
- * batch inference, not a conversation. The full prompt is self-contained.
+ * We stream the response so we can count tokens as they arrive — this lets
+ * the status endpoint report progress ("still alive") without knowing the
+ * final token count. The full text is buffered and returned when done.
  *
- * The `format: 'json'` parameter instructs Ollama to constrain its output
- * to valid JSON. This works most of the time but is not a hard guarantee —
- * the model may still include preamble text, so we extract JSON defensively.
+ * No timeout is imposed — background jobs run until Ollama finishes.
+ * The onToken callback receives a running count for status reporting.
  *
  * @param {string} endpoint
  * @param {string} model
  * @param {string} prompt
- * @returns {string|null} Raw response text, or null if Ollama is unreachable/timed out
+ * @param {{ onToken?: (count: number) => void, signal?: AbortSignal, json?: boolean }} options
+ * @returns {Promise<string|null>} Full response text, or null on failure
  */
-export async function runInference(endpoint, model, prompt) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
+export async function runInference(endpoint, model, prompt, { onToken, signal, json = false } = {}) {
   try {
     const res = await fetch(`${endpoint}/api/generate`, {
       method: 'POST',
@@ -68,34 +64,87 @@ export async function runInference(endpoint, model, prompt) {
       body: JSON.stringify({
         model,
         prompt,
-        format: 'json',  // asks Ollama to constrain output to JSON
-        stream: false,   // we want the full response in one payload, not streamed
+        ...(json ? { format: 'json' } : {}),
+        stream: true, // stream tokens so we can count progress
         options: {
-          temperature: 0.3, // lower temperature = more deterministic rankings
-                            // 0.0 is fully deterministic but can be repetitive
-                            // 0.3 gives slight variation while staying consistent
+          temperature: 0.3,
         },
       }),
-      signal: controller.signal,
+      signal,
     });
-
-    clearTimeout(timer);
 
     if (!res.ok) {
       console.error(`Ollama HTTP error: ${res.status}`);
       return null;
     }
 
-    const data = await res.json();
-    return data.response ?? null;
+    // Read the NDJSON stream — each line is a JSON object with a `response` chunk
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let fullResponse = '';
+    let tokenCount = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // keep incomplete last line
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const chunk = JSON.parse(line);
+          if (chunk.response) {
+            fullResponse += chunk.response;
+            tokenCount++;
+            onToken?.(tokenCount);
+          }
+          if (chunk.done) break;
+        } catch { /* malformed chunk — skip */ }
+      }
+    }
+
+    return fullResponse || null;
 
   } catch (err) {
-    clearTimeout(timer);
     if (err.name === 'AbortError') {
-      console.error(`Ollama inference timed out after ${TIMEOUT_MS / 1000}s`);
+      console.log('[ollama] Inference cancelled via abort signal');
     } else {
       console.error('Ollama inference error:', err.message);
     }
+    return null;
+  }
+}
+
+/**
+ * Generate an embedding vector for a text string.
+ *
+ * Uses a dedicated embedding model (nomic-embed-text) rather than the
+ * generalist LLM — much faster and purpose-built for semantic similarity.
+ *
+ * @param {string} endpoint  e.g. 'http://localhost:11434'
+ * @param {string} model     e.g. 'nomic-embed-text'
+ * @param {string} text      text to embed
+ * @returns {Promise<number[]|null>} embedding vector, or null on failure
+ */
+export async function runEmbedding(endpoint, model, text) {
+  try {
+    const res = await fetch(`${endpoint}/api/embeddings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, prompt: text }),
+    });
+    if (!res.ok) {
+      console.error(`Ollama embeddings HTTP error: ${res.status}`);
+      return null;
+    }
+    const data = await res.json();
+    return data.embedding ?? null;
+  } catch (err) {
+    console.error('Ollama embedding error:', err.message);
     return null;
   }
 }

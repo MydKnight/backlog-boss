@@ -124,6 +124,22 @@ async function fetchByHltbId(hltbId) {
 - Cache result on `games` table — don't re-fetch unless `hltb_fetched_at` > 30 days
 - If HLTB lookup fails: use `null`, do not block game display. Show "?" for completion %
 
+### Empty Result TTL Handling
+- Empty result array = valid "no match" response. Always set `hltb_fetched_at` so the game retries in 30 days, not every sync.
+- Throttling manifests as HTTP 403/429 or network errors, which land in `catch` and skip TTL (retries next sync).
+- Progressive backoff on consecutive empties (500ms → 1500ms → 3000ms) as a courtesy to the API, but does not affect TTL decision.
+- This prevents GOTY/enhanced/special editions that don't fuzzy-match from being retried on every sync indefinitely.
+
+### Manual HLTB ID Override (Future — Phase 5+)
+Many special editions, GOTY editions, and enhanced ports have slightly different names on HLTB
+(e.g. "Batman: Arkham Asylum GOTY Edition" vs. "Batman: Arkham Asylum"). These will never fuzzy-match correctly.
+
+Planned: per-game UI in settings to manually set `games.hltb_id`. When set:
+- Sync skips title-based search for that game
+- Calls `fetchByHltbId(hltb_id)` directly (or stores data already looked up manually)
+- Field: `games.hltb_id` (already in schema, nullable integer)
+- Exposing this: game detail view → "Fix HLTB data" → enter HLTB URL or ID → server resolves and stores
+
 ### Failure Handling
 - Wrap all calls in try/catch
 - Log failures silently — HLTB unavailability should not break the app

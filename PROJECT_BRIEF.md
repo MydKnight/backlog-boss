@@ -172,16 +172,32 @@ makes the Now view threshold a reliable curation tool.
 ### Phase 4 — Taste Engine
 - Ollama integration (Qwen 2.5 14B)
 - Taste profile context builder: assembles ratings, tags, notes, playtime signals
+- Pre-filter scoring: genre affinity, backburner boost, recency boost, negative
+  penalties, 100h+ playtime mitigation, hard genre exclusions, long-game cap
 - `ongoing` and `backburner` games handled correctly in context payload
 - Batch inference query + response parser
 - Next view updated to show LLM-ranked suggestions with explanations
 - "Refresh Suggestions" button triggers new snapshot if context changed
 - Retired and ongoing games correctly excluded from candidates
+- "Nope, not now" dismissal snoozes a suggestion for 30 days
 - **Custom tags on exit interviews:** free-form tag input alongside predefined
   pills; custom tags stored in the same positive_tags/negative_tags JSON arrays
   (schema already supports arbitrary strings); LLM prompt designed to interpret
   both predefined and custom vocabulary — deferred from Phase 2 so prompt design
   and tag handling are built together
+- **Series/franchise enrichment (additive):** IGDB `collection` and `franchises`
+  fields stored on game records; unplayed games in the same series as a highly-rated
+  completion get a pre-filter boost (+4); series label shown on game cards in
+  Now/Next/Done; enrichment runs lazily on next sync for games missing collection data
+- **Canonical duplicate linking (additive):** `canonical_igdb_id` nullable field on
+  `user_games`; when set, taste engine uses the canonical game's signals instead;
+  UI shows "duplicate of X" indicator; user manually flags dupes (e.g. Bioshock +
+  Bioshock Remastered); no automation — manual flagging is sufficient for a personal tool
+- **"Add to Backlog" flow in History tab:** third action alongside "Log to History"
+  and "Currently Playing"; platform picker (PS5/Switch/Other); creates `user_games`
+  row with `status = unplayed`, `ownership_type = owned_*`; lands in Next view as a
+  taste engine candidate; enables tracking non-Steam owned games that haven't been
+  started yet (e.g. PS5 backlog, non-Steam PC games, bundle constituent games)
 
 ### Phase 5 — Guide Reader
 - URL ingestion + Readability parsing
@@ -189,7 +205,14 @@ makes the Now view threshold a reliable curation tool.
 - Mobile reader UI with scroll position persistence
 - Offline access after first fetch
 
-### Phase 6 — Multi-User
+### Phase 6 — Data Quality Tools
+- Manual HLTB ID override: per-game UI to enter an HLTB URL or ID for games that don't fuzzy-match
+  (GOTY editions, enhanced ports, special editions — e.g. "Batman: Arkham Asylum GOTY Edition" vs. base game)
+  Stores directly to `games.hltb_id`; sync uses it instead of title search
+- Manual IGDB match: same pattern for games Steam sync couldn't auto-match to IGDB
+- Bulk "unmatched games" review view: surface all games with `igdb_id = null` or `hltb_main = null` for manual triage
+
+### Phase 7 — Multi-User
 - Auth layer
 - Per-user Steam API key storage
 - User-scoped all queries

@@ -141,6 +141,56 @@ export function resetHltbFetchedAt() {
 // Games below this threshold appear in Next instead, even if status = in_progress.
 export const NOW_THRESHOLD_MINUTES = 60;
 
+// Days of inactivity before an in_progress game is auto-demoted to backburner.
+export const INACTIVITY_DAYS = 90;
+
+/**
+ * Demote stale in_progress games to backburner.
+ * Targets games that haven't been played in INACTIVITY_DAYS days, or that
+ * have playtime but no recorded last_played_at (played so long ago Steam
+ * didn't track it).
+ *
+ * Sets status = 'backburner' so it survives future syncs and appears in Next.
+ * Only affects status = 'in_progress' — ongoing/backburner/completed/retired untouched.
+ *
+ * @param {number} userId
+ * @returns {{ demoted: number, titles: string[] }}
+ */
+export function demoteStaleInProgressGames(userId) {
+  const db = getDb();
+  const cutoff = new Date(Date.now() - INACTIVITY_DAYS * 24 * 60 * 60 * 1000).toISOString();
+
+  // Find stale games before updating so we can log titles
+  const stale = db.prepare(`
+    SELECT ug.igdb_id, g.title
+    FROM user_games ug
+    JOIN games g ON g.igdb_id = ug.igdb_id
+    WHERE ug.user_id = :userId
+      AND ug.status = 'in_progress'
+      AND ug.playtime_minutes >= :threshold
+      AND (
+        ug.last_played_at IS NULL
+        OR ug.last_played_at < :cutoff
+      )
+  `).all({ userId, threshold: NOW_THRESHOLD_MINUTES, cutoff });
+
+  if (stale.length === 0) return { demoted: 0, titles: [] };
+
+  db.prepare(`
+    UPDATE user_games
+    SET status = 'backburner', updated_at = CURRENT_TIMESTAMP
+    WHERE user_id = :userId
+      AND status = 'in_progress'
+      AND playtime_minutes >= :threshold
+      AND (
+        last_played_at IS NULL
+        OR last_played_at < :cutoff
+      )
+  `).run({ userId, threshold: NOW_THRESHOLD_MINUTES, cutoff });
+
+  return { demoted: stale.length, titles: stale.map(g => g.title) };
+}
+
 /**
  * Ongoing games for the Now view "Always On" section.
  * These have no completion state — live service, sandboxes, board game apps, etc.
@@ -273,6 +323,64 @@ export function getGamesNeedingHltbLookup() {
   `).all();
 }
 
+// ---------------------------------------------------------------------------
+// Embeddings
+// ---------------------------------------------------------------------------
+
+/**
+ * Games that need an embedding generated — no embedding yet, or embedded with
+ * a different model than currently configured.
+ */
+export function getGamesNeedingEmbedding(embedModel) {
+  return getDb().prepare(`
+    SELECT id, igdb_id, title, genres, themes
+    FROM games
+    WHERE embedding IS NULL
+       OR embedding_model != ?
+  `).all(embedModel);
+}
+
+/**
+ * Store an embedding vector for a game.
+ * @param {number} igdbId
+ * @param {{ vector: number[], model: string }} param
+ */
+export function updateGameEmbedding(igdbId, { vector, model }) {
+  getDb().prepare(`
+    UPDATE games
+    SET embedding = ?, embedding_model = ?, embedding_fetched_at = CURRENT_TIMESTAMP,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE igdb_id = ?
+  `).run(JSON.stringify(vector), model, igdbId);
+}
+
+/**
+ * Fetch all game embeddings for ranking.
+ * Only returns games that have an embedding stored.
+ */
+export function getAllGameEmbeddings() {
+  return getDb().prepare(`
+    SELECT igdb_id, title, genres, themes, hltb_main_extras, hltb_main, embedding
+    FROM games
+    WHERE embedding IS NOT NULL
+  `).all();
+}
+
+/**
+ * Fetch all eligible candidate igdb_ids for a user — unplayed + backburner,
+ * not snoozed. Used by the embedding ranker to filter to owned games only.
+ */
+export function getEligibleCandidateIds(userId) {
+  const now = new Date().toISOString();
+  return getDb().prepare(`
+    SELECT ug.igdb_id, ug.status, ug.playtime_minutes, ug.taste_boost, ug.added_at
+    FROM user_games ug
+    WHERE ug.user_id = ?
+      AND ug.status IN ('unplayed', 'backburner')
+      AND (ug.snoozed_until IS NULL OR ug.snoozed_until < ?)
+  `).all(userId, now);
+}
+
 /**
  * Mark a game as completed. Writes game_events + game_interviews in a transaction.
  */
@@ -313,8 +421,10 @@ export function markGameBeaten(userId, igdbId, { starRating, positiveTags, negat
 
 /**
  * Mark a game as retired. Writes game_events + game_interviews in a transaction.
+ * starRating is optional — a retired game may still have a positive rating
+ * (e.g. loved it but won't return) which feeds the taste engine positively.
  */
-export function markGameRetired(userId, igdbId, { negativeTags, freeText }) {
+export function markGameRetired(userId, igdbId, { starRating, positiveTags, negativeTags, freeText }) {
   const db = getDb();
   db.exec('BEGIN IMMEDIATE');
   try {
@@ -324,19 +434,20 @@ export function markGameRetired(userId, igdbId, { negativeTags, freeText }) {
     `).run({ userId, igdbId });
 
     const event = db.prepare(`
-      INSERT INTO game_events (user_id, igdb_id, event_type)
-      VALUES (:userId, :igdbId, 'retired')
-    `).run({ userId, igdbId });
+      INSERT INTO game_events (user_id, igdb_id, event_type, star_rating)
+      VALUES (:userId, :igdbId, 'retired', :starRating)
+    `).run({ userId, igdbId, starRating: starRating ?? null });
 
     db.prepare(`
       INSERT INTO game_interviews
-        (user_id, game_event_id, igdb_id, interview_type, negative_tags, free_text)
+        (user_id, game_event_id, igdb_id, interview_type, positive_tags, negative_tags, free_text)
       VALUES
-        (:userId, :eventId, :igdbId, 'retired', :negativeTags, :freeText)
+        (:userId, :eventId, :igdbId, 'retired', :positiveTags, :negativeTags, :freeText)
     `).run({
       userId,
       eventId: event.lastInsertRowid,
       igdbId,
+      positiveTags: JSON.stringify(positiveTags ?? []),
       negativeTags: JSON.stringify(negativeTags ?? []),
       freeText: freeText ?? null,
     });
@@ -662,23 +773,25 @@ export function saveTasteSnapshot(userId, { modelUsed, contextHash, suggestions 
 }
 
 /**
- * Assemble the full taste profile context for a user.
- * This is what gets sent to Ollama as the basis for ranking candidate games.
+ * Assemble the taste profile context for a user.
  *
- * Returns four arrays:
- *   completedGames  — games beaten with ratings and tags (strongest positive signal)
- *   retiredGames    — games abandoned with reason tags (negative/avoidance signal)
- *   inProgressGames — currently playing (for context, not ranking)
- *   candidateGames  — unplayed + backburner games to be ranked
+ * Returns completed/retired/in-progress game signals used to build the
+ * taste profile text for embedding. Candidate ranking is handled separately
+ * by the embedding service (rankCandidatesBySimilarity).
+ *
+ * Returns:
+ *   completedGames  — all beaten games with ratings/tags
+ *   retiredGames    — all retired games with reason tags
+ *   inProgressGames — currently playing (context only)
  */
 export function getTasteContext(userId) {
   const db = getDb();
+  const twelveMonthsAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
 
-  // Completed games — join game_events + game_interviews + games
   const completedGames = db.prepare(`
     SELECT
       g.title, g.genres, g.themes,
-      ge.star_rating,
+      ge.star_rating, ge.event_date,
       gi.positive_tags, gi.negative_tags, gi.free_text
     FROM game_events ge
     JOIN games g ON g.igdb_id = ge.igdb_id
@@ -687,7 +800,6 @@ export function getTasteContext(userId) {
     ORDER BY ge.event_date DESC
   `).all({ userId });
 
-  // Retired games
   const retiredGames = db.prepare(`
     SELECT
       g.title, g.genres, g.themes,
@@ -699,7 +811,6 @@ export function getTasteContext(userId) {
     ORDER BY ge.event_date DESC
   `).all({ userId });
 
-  // In-progress games (context only — already being played)
   const inProgressGames = db.prepare(`
     SELECT
       g.title, g.genres,
@@ -711,18 +822,37 @@ export function getTasteContext(userId) {
     ORDER BY ug.playtime_minutes DESC
   `).all({ userId });
 
-  // Candidate games — unplayed + backburner, these get ranked
-  const candidateGames = db.prepare(`
-    SELECT
-      g.igdb_id, g.title, g.genres, g.themes,
-      g.hltb_main_extras, g.hltb_main,
-      ug.playtime_minutes, ug.status
-    FROM user_games ug
-    JOIN games g ON g.igdb_id = ug.igdb_id
-    WHERE ug.user_id = :userId
-      AND ug.status IN ('unplayed', 'backburner')
-    ORDER BY g.title ASC
-  `).all({ userId });
+  return {
+    completedGames: completedGames.map(g => ({
+      title: g.title,
+      genres: g.genres ? JSON.parse(g.genres) : [],
+      star_rating: g.star_rating,
+      positive_tags: g.positive_tags ? JSON.parse(g.positive_tags) : [],
+      negative_tags: g.negative_tags ? JSON.parse(g.negative_tags) : [],
+      free_text: g.free_text ?? null,
+      recency_weight: g.event_date > twelveMonthsAgo ? 'recent' : 'older',
+    })),
+    retiredGames: retiredGames.map(g => ({
+      title: g.title,
+      genres: g.genres ? JSON.parse(g.genres) : [],
+      negative_tags: g.negative_tags ? JSON.parse(g.negative_tags) : [],
+      free_text: g.free_text ?? null,
+    })),
+    inProgressGames: inProgressGames.map(g => ({
+      title: g.title,
+      playtime_hours: g.playtime_minutes ? Math.round(g.playtime_minutes / 60) : 0,
+      hltb_hours: g.hltb_main_extras ?? g.hltb_main ?? null,
+    })),
+  };
+}
 
-  return { completedGames, retiredGames, inProgressGames, candidateGames };
+/**
+ * Snooze a suggestion — exclude from taste engine candidates for 30 days.
+ */
+export function snoozeSuggestion(userId, igdbId) {
+  const snoozedUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  getDb().prepare(`
+    UPDATE user_games SET snoozed_until = :snoozedUntil, updated_at = CURRENT_TIMESTAMP
+    WHERE user_id = :userId AND igdb_id = :igdbId
+  `).run({ snoozedUntil, userId, igdbId });
 }

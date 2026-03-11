@@ -296,11 +296,14 @@ export async function lookupHltbForAllGames(user) {
         const results = raw?.data ?? [];
 
         if (results.length === 0) {
-          // Empty result could be throttling — don't set hltb_fetched_at so we retry next sync
           consecutiveEmpty++;
-          console.warn(`HLTB: empty response for "${game.title}" (${consecutiveEmpty} consecutive) — skipping TTL mark`);
+          // Empty array = valid "no match" response from HLTB.
+          // Throttling manifests as HTTP 403/429 (caught below), not empty results.
+          // Always mark TTL so this game retries in 30 days, not every sync.
+          console.warn(`HLTB: no results for "${game.title}" (${consecutiveEmpty} consecutive empty) — marking TTL`);
+          updateGameFromHltb(game.id, { hltb_id: null, main: null, mainExtras: null, completionist: null });
 
-          // Back off progressively when throttling is suspected
+          // Still back off when many consecutive empties — polite to the API regardless
           const backoff = consecutiveEmpty >= 5 ? 3000 : consecutiveEmpty >= 2 ? 1500 : 500;
           await new Promise(r => setTimeout(r, backoff));
           continue;
