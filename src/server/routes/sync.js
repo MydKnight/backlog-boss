@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getDefaultUser, getRecentSyncLogs } from '../db/queries.js';
+import { getDefaultUser, getRecentSyncLogs, demoteStaleInProgressGames } from '../db/queries.js';
 import { syncSteamLibrary } from '../services/steam.js';
 import { enrichGamesFromIgdb } from '../services/igdb.js';
 import { lookupHltbForAllGames } from '../services/hltb.js';
@@ -28,6 +28,7 @@ router.post('/', async (req, res) => {
     steam: null,
     igdb: null,
     hltb: null,
+    demotion: null,
     errors: [],
   };
 
@@ -39,6 +40,22 @@ router.post('/', async (req, res) => {
   } catch (err) {
     console.error('Sync: Steam sync failed:', err.message);
     results.errors.push(`steam: ${err.message}`);
+  }
+
+  // Phase 1b: Demote stale in_progress games to backburner
+  // Runs after Steam sync so playtime + last_played_at are fresh.
+  try {
+    const demotion = demoteStaleInProgressGames(user.id);
+    results.demotion = demotion;
+    if (demotion.demoted > 0) {
+      console.log(`Sync: demoted ${demotion.demoted} stale in_progress games to backburner`);
+      if (demotion.demoted <= 20) {
+        console.log('  Demoted:', demotion.titles.join(', '));
+      }
+    }
+  } catch (err) {
+    console.error('Sync: stale game demotion failed:', err.message);
+    results.errors.push(`demotion: ${err.message}`);
   }
 
   // Phase 2: IGDB enrichment

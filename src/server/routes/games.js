@@ -121,17 +121,17 @@ router.post('/:igdbId/beaten', (req, res) => {
 
 /**
  * POST /api/games/:igdbId/retired
- * Body: { negativeTags, freeText }
+ * Body: { starRating, positiveTags, negativeTags, freeText }
  */
 router.post('/:igdbId/retired', (req, res) => {
   const user = getDefaultUser();
   if (!user) return res.status(500).json({ error: 'No user configured.' });
 
   const igdbId = parseInt(req.params.igdbId);
-  const { negativeTags, freeText } = req.body;
+  const { starRating, positiveTags, negativeTags, freeText } = req.body;
 
   try {
-    markGameRetired(user.id, igdbId, { negativeTags, freeText });
+    markGameRetired(user.id, igdbId, { starRating, positiveTags, negativeTags, freeText });
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });

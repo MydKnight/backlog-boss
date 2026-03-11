@@ -229,6 +229,23 @@ banner for HLTB-null + playtime > 10h candidates.
 - [ ] Next view displays LLM-ranked suggestions with explanations
 - [ ] "Refresh Suggestions" button triggers new snapshot if context changed
 - [ ] Retired and ongoing games correctly excluded from candidates
+- [ ] **Series/franchise enrichment (4.2 additive):**
+  - `collection_id`, `collection_name`, `franchise_names` columns added to `games` table
+  - IGDB enrichment service updated to fetch `collection` and `franchises` fields
+  - Pre-filter scoring updated: unplayed games in same series as a 4★+ completion get +4 boost
+  - Series label shown on game cards in Now/Next/Done views
+  - Re-enrichment runs on next sync (lazy — only games not yet enriched with collection data)
+- [ ] **Canonical duplicate linking (4.2 additive):**
+  - `canonical_igdb_id` nullable column added to `user_games`
+  - Taste engine uses canonical game's signals when set
+  - UI shows "duplicate of X" indicator on affected cards
+  - User manually flags duplicates (e.g. Bioshock + Bioshock Remastered)
+- [ ] **"Add to Backlog" flow in History tab (4.2 additive):**
+  - Third action in History search action sheet alongside "Log to History" and "Currently Playing"
+  - Platform picker (PS5/Switch/Other) — no playtime, no interview
+  - Creates `user_games` row with `status = unplayed`, `ownership_type = owned_*`
+  - Lands in Next view as a taste engine candidate
+  - Enables non-Steam owned games that haven't been started (PS5 backlog, bundle games)
 
 ### Phase 5 Done
 - [ ] Guide URL input per game

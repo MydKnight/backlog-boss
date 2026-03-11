@@ -68,27 +68,23 @@ export default function ExitInterview({ game, type, onSubmit, onClose }) {
         {/* Scrollable body */}
         <div className="overflow-y-auto px-4 py-4 flex flex-col gap-5">
 
-          {/* Star rating — beaten (required) or history (optional) */}
-          {(isBeaten || isHistory) && (
-            <div>
-              <p className="text-sm font-medium text-slate-300 mb-3">
-                How would you rate it?
-                {isBeaten
-                  ? <span className="text-red-400"> *</span>
-                  : <span className="text-slate-500"> (optional)</span>
-                }
-              </p>
-              <StarRating value={starRating} onChange={setStarRating} />
-            </div>
-          )}
+          {/* Star rating — beaten (required), history and retired (optional) */}
+          <div>
+            <p className="text-sm font-medium text-slate-300 mb-3">
+              How would you rate it?
+              {isBeaten
+                ? <span className="text-red-400"> *</span>
+                : <span className="text-slate-500"> (optional)</span>
+              }
+            </p>
+            <StarRating value={starRating} onChange={setStarRating} />
+          </div>
 
-          {/* Positive tags — beaten and history */}
-          {(isBeaten || isHistory) && (
-            <div>
-              <p className="text-sm font-medium text-slate-300 mb-2">What stood out? <span className="text-slate-500">(optional)</span></p>
-              <TagPills tags={POSITIVE_TAGS} selected={positiveTags} onToggle={id => toggleTag(positiveTags, setPositiveTags, id)} />
-            </div>
-          )}
+          {/* Positive tags — all types */}
+          <div>
+            <p className="text-sm font-medium text-slate-300 mb-2">What stood out? <span className="text-slate-500">(optional)</span></p>
+            <TagPills tags={POSITIVE_TAGS} selected={positiveTags} onToggle={id => toggleTag(positiveTags, setPositiveTags, id)} />
+          </div>
 
           {/* Negative / reason tags — beaten and retired only */}
           {!isHistory && (

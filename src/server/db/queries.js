@@ -360,7 +360,7 @@ export function updateGameEmbedding(igdbId, { vector, model }) {
  */
 export function getAllGameEmbeddings() {
   return getDb().prepare(`
-    SELECT igdb_id, title, genres, themes, hltb_main_extras, hltb_main, embedding
+    SELECT igdb_id, title, cover_url, genres, themes, hltb_main_extras, hltb_main, embedding
     FROM games
     WHERE embedding IS NOT NULL
   `).all();

@@ -61,7 +61,7 @@ The user's relationship to a game. Covers owned, historical, and wishlist entrie
 | `user_id` | INTEGER FK → users | |
 | `igdb_id` | INTEGER FK → games | |
 | `ownership_type` | TEXT | `owned_steam` / `owned_switch` / `owned_ps5` / `owned_other` / `historical` / `unowned` |
-| `status` | TEXT | `unplayed` / `in_progress` / `completed` / `retired` |
+| `status` | TEXT | `unplayed` / `in_progress` / `completed` / `retired` / `ongoing` / `backburner` |
 | `playtime_minutes` | INTEGER | Steam sync or manual |
 | `playtime_source` | TEXT | `steam` / `manual` |
 | `last_played_at` | DATETIME | From Steam or manual |
@@ -69,6 +69,8 @@ The user's relationship to a game. Covers owned, historical, and wishlist entrie
 | `completion_pct_override` | REAL | Manual override 0–100 — nullable |
 | `steam_synced_at` | DATETIME | Last Steam sync for this game |
 | `added_at` | DATETIME | When user added/imported this game |
+| `taste_boost` | INTEGER | Default 0. Set to 99 to force game into taste engine candidate pool regardless of pre-filter score. UI: "Force into next evaluation" toggle. |
+| `snoozed_until` | DATETIME | Nullable. When set, game is excluded from taste engine candidates until this date. Set to now+30d via "Nope, not now" dismissal on a suggestion. Auto-re-enters pool after expiry. |
 | `created_at` | DATETIME | |
 | `updated_at` | DATETIME | |
 
@@ -204,7 +206,8 @@ When querying Ollama, the app assembles this JSON payload:
       "star_rating": 5,
       "positive_tags": ["great_story", "loved_gameplay", "would_replay"],
       "negative_tags": [],
-      "summary": "Loved the exploration and tight controls. Stunning art."
+      "free_text": "Loved the exploration and tight controls. Stunning art.",
+      "recency_weight": 1.5
     }
   ],
   "retired_games": [
@@ -212,7 +215,7 @@ When querying Ollama, the app assembles this JSON payload:
       "title": "Assassin's Creed Origins",
       "genres": ["action", "open_world"],
       "negative_tags": ["felt_repetitive", "lost_interest"],
-      "summary": "Open world fatigue. Too many collectibles, story lost me."
+      "free_text": "Open world fatigue. Too many collectibles, story lost me."
     }
   ],
   "in_progress_games": [
@@ -220,8 +223,7 @@ When querying Ollama, the app assembles this JSON payload:
       "title": "Hades",
       "genres": ["roguelike", "action"],
       "playtime_hours": 12,
-      "hltb_main_extras": 22,
-      "estimated_pct": 55
+      "hltb_main_extras": 22
     }
   ],
   "candidate_games": [
@@ -230,13 +232,62 @@ When querying Ollama, the app assembles this JSON payload:
       "title": "Dead Cells",
       "genres": ["roguelike", "platformer"],
       "hltb_main_extras": 20,
-      "playtime_hours": 0
+      "playtime_hours": 0,
+      "is_backburner": false
     }
   ]
 }
 ```
 
-The prompt instructs the model to rank `candidate_games` by predicted enjoyment given the user's history, returning a JSON array of `{ igdb_id, title, explanation, rank }`.
+The prompt instructs the model to rank `candidate_games` by predicted enjoyment given the user's history, returning a JSON array of `{ igdb_id, title, explanation, rank }`. The model is asked to return 25 results — 20 are displayed, 5 held as dismissal replacements.
+
+---
+
+## Taste Engine Pre-Filter Algorithm
+
+With 1300+ candidate games, sending all to the LLM would exceed context window limits and degrade output quality. A pre-filter scores and narrows the candidate pool to 100 games before LLM inference.
+
+### Hard Exclusions (never sent to model)
+- Status: `completed`, `retired`, `ongoing`, `in_progress` (above 60-min threshold)
+- `snoozed_until` is set and has not expired
+- Genre is hard-excluded: 3+ retirements with that genre, zero positive completions in that genre
+
+### Scoring
+```
+Base score = 0
+
+Positive signals:
+  +3  genre overlap with 5★ completion in last 12 months
+  +2  genre overlap with 5★ completion (older)
+  +1  genre overlap with 4★ completion
+  +5  status = backburner (explicit prior intent)
+  +3  added_at within last 30 days (recency boost for new library additions)
+  +99 taste_boost = 1 (forced inclusion — always enters pool regardless of score)
+
+Negative signals:
+  -1  genre overlap with retired game (soft penalty)
+
+Mitigations:
+  playtime_minutes > 6000 (100h): zero out all negative scores
+  (high prior engagement overrides genre penalties)
+```
+
+### Pool Constraints (applied after scoring)
+- Sort by score descending, take top 100
+- Cap games where `hltb_main_extras > 40h` at 15 of the 100 slots
+  (prevents long-game dominance when Now view is already full of epics)
+- `taste_boost` games always occupy a slot regardless of cap rules
+
+### Pre-filter Score Storage
+After each run, pre-filter scores for ALL candidates are stored (not just top 100).
+This enables the "Why wasn't this game evaluated?" lookup — the UI can show a
+game's score breakdown explaining why it didn't make the cut.
+
+### "Nope, Not Now" Dismissal
+When a user dismisses a suggestion from the Next view:
+- `snoozed_until = now + 30 days` is written to `user_games`
+- The dismissed game is replaced immediately from the held reserve (positions 21-25)
+- After 30 days the game automatically re-enters the candidate pool
 
 ---
 

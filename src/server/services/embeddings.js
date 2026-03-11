@@ -184,6 +184,7 @@ export function rankCandidatesBySimilarity(tasteVector, userId, boosts = {}) {
     return {
       igdb_id: game.igdb_id,
       title: game.title,
+      cover_url: game.cover_url ?? null,
       genres: game.genres ? JSON.parse(game.genres) : [],
       hltb_hours: game.hltb_main_extras ?? game.hltb_main ?? null,
       playtime_hours: meta.playtime_minutes ? Math.round(meta.playtime_minutes / 60) : 0,

@@ -329,6 +329,9 @@ async function runBackgroundInference({ user, context, contextHash }) {
         rank: i + 1,
         explanation: explanation ?? '',
         similarity: Math.round(game.similarity * 1000) / 1000,
+        cover_url: game.cover_url ?? null,
+        genres: game.genres ?? [],
+        hltb_hours: game.hltb_hours ?? null,
       });
 
       console.log(`[taste] ${i + 1}/15 explained: ${game.title}`);
