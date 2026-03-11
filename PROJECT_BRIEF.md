@@ -211,8 +211,34 @@ makes the Now view threshold a reliable curation tool.
   Stores directly to `games.hltb_id`; sync uses it instead of title search
 - Manual IGDB match: same pattern for games Steam sync couldn't auto-match to IGDB
 - Bulk "unmatched games" review view: surface all games with `igdb_id = null` or `hltb_main = null` for manual triage
+- `igdb_ignored` flag for permanently unresolvable entries (DLC, test servers, duplicates) — removes from triage list without deleting
 
-### Phase 7 — Multi-User
+### Phase 7 — Guide Source Search + Content Paste
+- Search-based guide discovery so users can find guides without manually hunting for URLs
+- Search is in-app: title pre-filled from the game, results grouped by site, tap to import
+- Raw content paste lets users bypass bot-blocked sites (e.g. GameFAQs) by pasting page source
+- **Tier 1 search sites:** StrategyWiki, TrueAchievements, TrueTrophies
+  - GameFAQs excluded from search — Cloudflare bot protection blocks server-side fetches;
+    users can still manually paste GameFAQs page source using the Paste Content mode
+- **Architecture:**
+  - `src/server/services/guideSources.js` — per-site search functions, returns `[{ title, url, site, type }]`
+  - `GET /api/guides/search?title=` — runs all Tier 1 searches in parallel, returns combined results
+  - `POST /api/guides` extended: accepts `{ igdbId, pastedContent, title, sourceUrl? }` in addition
+    to existing `{ igdbId, url }` — skips network fetch, runs Readability on pasted HTML or stores
+    plain text directly; `sourceUrl` used for image URL resolution and "open in browser" link
+  - GuideSheet redesigned with three add modes: Search | Paste URL | Paste Content
+- **Site notes:**
+  - StrategyWiki: MediaWiki search, returns article links; open wiki, no bot protection
+  - TrueAchievements: search → find game links → return `/game/{slug}/walkthrough`
+  - TrueTrophies: same pattern, returns `/game/{slug}/guide`
+  - All sites: server-side fetch with full browser header fingerprint (same as readability.js)
+- Importing from search results uses the existing ingest pipeline (`POST /api/guides` with URL)
+- Failed scrapes fail silently per-site; other sites still return results
+- **Paste Content mode:** user copies page source (Ctrl+U → Ctrl+A → Ctrl+C) and pastes into textarea;
+  HTML auto-detected and run through Readability; plain text stored as-is; images display online only
+  (offline image embedding is a post-MVP feature)
+
+### Phase 8 — Multi-User
 - Auth layer
 - Per-user Steam API key storage
 - User-scoped all queries

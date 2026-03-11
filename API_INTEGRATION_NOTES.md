@@ -204,6 +204,77 @@ Return ONLY the JSON array. No preamble, no markdown.
 
 ---
 
+## Guide Source Search
+
+Three Tier-1 guide sites are searched in parallel server-side. All use full browser header
+fingerprint (same as readability.js). Each search function fails gracefully and returns `[]`
+on any error — a blocked or unresponsive site never breaks results from other sites.
+
+### Site Coverage
+
+| Site | What it provides | Search pattern |
+|---|---|---|
+| StrategyWiki | Wiki walkthroughs, strong retro/classic coverage | MediaWiki `Special:Search` |
+| TrueAchievements | Xbox achievement walkthroughs | Search → game page → `/walkthrough` |
+| TrueTrophies | PS trophy guides | Search → game page → `/guide` |
+| GameFAQs | Not in search — bot protection blocks server-side fetch | Manual paste only |
+
+### Search Endpoint
+
+```
+GET /api/guides/search?title={title}
+```
+
+Runs all three site searches in parallel (`Promise.allSettled`). Returns:
+```json
+{
+  "results": [
+    { "title": "...", "url": "...", "site": "strategywiki", "type": "walkthrough" },
+    { "title": "...", "url": "...", "site": "trueachievements", "type": "walkthrough" },
+    ...
+  ]
+}
+```
+
+Client groups results by `site` for display. Importing a result calls `POST /api/guides` with
+the URL — uses the existing ingest pipeline; may still fail (403 etc.) for individual pages.
+
+### StrategyWiki Selectors
+- Search URL: `https://strategywiki.org/wiki/Special:Search?search={q}&fulltext=1`
+- Result links: `.mw-search-result-heading a` (MediaWiki standard)
+- Filters out `Special:` and `Talk:` namespace links
+
+### TrueAchievements Selectors
+- Search URL: `https://www.trueachievements.com/search?searchkey={q}`
+- Game links matched by regex: `/^\/game\/[^/]+\/?$/`
+- Walkthrough URL: `{gamePath}/walkthrough`
+
+### TrueTrophies Selectors
+- Search URL: `https://www.truetrophies.com/search?searchkey={q}`
+- Same link pattern as TrueAchievements
+- Guide URL: `{gamePath}/guide`
+
+---
+
+## Paste Content Ingestion
+
+Users can paste raw HTML page source (Ctrl+U → Ctrl+A → Ctrl+C) to bypass bot-blocked sites.
+
+### How it works
+- `POST /api/guides` accepts either `{ igdbId, url }` (fetch from URL) or
+  `{ igdbId, pastedContent, title, sourceUrl? }` (skip fetch, process locally)
+- `sourceUrl` optional: used as the Readability base URL for resolving relative image paths,
+  and stored as `source_url` so the "open in browser" link still works
+- Auto-detection: if `pastedContent` matches HTML tag patterns → Readability parse → `content_type: html`;
+  otherwise → stored as-is → `content_type: text`
+- Same Readability pipeline as URL fetch; same storage path
+
+### Images in pasted content
+Images rendered from pasted HTML reference the original site's CDN. They display while online
+but fail offline. Downloading and embedding images (base64 inline) is a post-MVP feature.
+
+---
+
 ## Mozilla Readability (Guide Ingestion)
 
 **Package:** `@mozilla/readability` + `jsdom` for server-side parsing

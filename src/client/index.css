@@ -38,3 +38,28 @@
 }
 .guide-html pre { padding: 0.75em 1em; overflow-x: auto; white-space: pre-wrap; }
 .guide-html hr  { border-color: #334155; margin: 1.5em 0; }
+
+/* Tables — wrap in scrollable container so wide tables don't break mobile layout */
+.guide-html table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  margin: 1em 0;
+  display: block;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.guide-html th, .guide-html td {
+  border: 1px solid #334155; /* slate-700 */
+  padding: 0.4em 0.65em;
+  text-align: left;
+  white-space: nowrap;
+}
+.guide-html th {
+  background: #1e293b; /* slate-800 */
+  color: #f1f5f9;      /* slate-100 */
+  font-weight: 600;
+}
+.guide-html tr:nth-child(even) td {
+  background: #0f172a; /* slate-900 — subtle zebra stripe */
+}

@@ -102,13 +102,85 @@ export async function fetchAndParseGuide(url) {
     };
   }
 
+  const content = convertDivTables(article.content);
   return {
     title: article.title || titleFromUrl(url),
-    content: article.content,
+    content,
     contentType: 'html',
-    contentLength: article.content.length,
+    contentLength: content.length,
     parseWarning: false,
   };
+}
+
+/**
+ * Detect and convert div-based "tables" to proper <table> HTML.
+ *
+ * Some guide editors (Steam, GameFAQs HTML guides) produce CSS-grid tables as:
+ *   <div>                    ← outer container
+ *     <div><p>ID</p>…</div>  ← header row
+ *     <div><p>004</p>…</div> ← data rows
+ *   </div>
+ *
+ * Readability strips the classes that made these look like grids.
+ * This converts matching patterns to <table><thead><tbody> so our table
+ * CSS can render them correctly.
+ *
+ * Heuristic: outer div whose children are all divs, each containing only <p>
+ * elements with the same count and short text content (cell-like, not prose).
+ */
+export function convertDivTables(html) {
+  const dom = new JSDOM(html);
+  const doc = dom.window.document;
+  let changed = false;
+
+  for (const outer of [...doc.querySelectorAll('div')]) {
+    const rows = [...outer.children];
+    if (rows.length < 2) continue;
+    if (!rows.every(r => r.tagName === 'DIV')) continue;
+
+    // Each row's direct children must all be <p>
+    const colCounts = rows.map(r => {
+      const cells = [...r.children];
+      return cells.length > 0 && cells.every(c => c.tagName === 'P') ? cells.length : -1;
+    });
+
+    if (colCounts.includes(-1)) continue;
+    const colCount = colCounts[0];
+    if (colCount < 2 || colCount > 20) continue;
+    if (!colCounts.every(c => c === colCount)) continue;
+
+    // Cell text must be short — we don't want to tabulate prose paragraphs
+    const allShort = rows.every(row =>
+      [...row.querySelectorAll('p')].every(p => p.textContent.trim().length < 120)
+    );
+    if (!allShort) continue;
+
+    // Build proper table
+    const table = doc.createElement('table');
+    const thead = doc.createElement('thead');
+    const tbody = doc.createElement('tbody');
+
+    rows.forEach((row, i) => {
+      const tr = doc.createElement('tr');
+      for (const p of row.querySelectorAll('p')) {
+        const cell = doc.createElement(i === 0 ? 'th' : 'td');
+        cell.innerHTML = p.innerHTML;
+        tr.appendChild(cell);
+      }
+      if (i === 0) {
+        thead.appendChild(tr);
+        table.appendChild(thead);
+      } else {
+        tbody.appendChild(tr);
+      }
+    });
+    table.appendChild(tbody);
+
+    outer.parentNode.replaceChild(table, outer);
+    changed = true;
+  }
+
+  return changed ? doc.body.innerHTML : html;
 }
 
 function titleFromUrl(url) {
