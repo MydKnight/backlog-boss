@@ -267,7 +267,7 @@ function SuggestionsSection({ onSnoozed, onStartPlaying }) {
 // Full library list
 // ---------------------------------------------------------------------------
 
-export default function Next({ refreshKey = 0, onGameAction }) {
+export default function Next({ refreshKey = 0, onGameAction, onOpenGuide }) {
   const { data, loading, error } = useApi(`/api/games/next?_=${refreshKey}`);
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState(null);
@@ -330,7 +330,7 @@ export default function Next({ refreshKey = 0, onGameAction }) {
           <NextRow
             key={game.igdb_id ?? game.id}
             game={game}
-            onTap={game.status === 'backburner' ? () => setSelected(game) : undefined}
+            onTap={() => setSelected(game)}
           />
         ))}
       </ul>
@@ -343,9 +343,14 @@ export default function Next({ refreshKey = 0, onGameAction }) {
           onClose={close}
           actions={[
             {
-              label: 'Move to Now',
-              description: 'Resume this game — moves it back to your Now view',
+              label: 'Start Playing',
+              description: 'Move this game to your Now view',
               onClick: () => restoreToNow(selected.igdb_id),
+            },
+            {
+              label: 'Guide',
+              description: 'View or add a walkthrough guide',
+              onClick: () => { close(); onOpenGuide?.(selected.igdb_id, selected.title); },
             },
           ]}
         />

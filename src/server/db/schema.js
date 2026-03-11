@@ -178,4 +178,15 @@ export function initSchema(db) {
     db.exec("ALTER TABLE users ADD COLUMN ollama_embed_model TEXT NOT NULL DEFAULT 'nomic-embed-text'");
     console.log('Migration: added ollama_embed_model to users');
   }
+
+  // Guide content type + parse warning
+  const guidesCols = db.prepare("PRAGMA table_info(guides)").all().map(c => c.name);
+  if (!guidesCols.includes('content_type')) {
+    db.exec("ALTER TABLE guides ADD COLUMN content_type TEXT NOT NULL DEFAULT 'html'");
+    console.log('Migration: added content_type to guides');
+  }
+  if (!guidesCols.includes('parse_warning')) {
+    db.exec("ALTER TABLE guides ADD COLUMN parse_warning INTEGER NOT NULL DEFAULT 0");
+    console.log('Migration: added parse_warning to guides');
+  }
 }

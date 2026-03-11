@@ -5,7 +5,7 @@ import ActionSheet from '../components/ActionSheet.jsx';
 import ExitInterview from '../components/ExitInterview.jsx';
 import { relativeDate, hoursLabel } from '../utils/format.js';
 
-export default function Now({ refreshKey = 0, onGameAction }) {
+export default function Now({ refreshKey = 0, onGameAction, onOpenGuide }) {
   const { data, loading, error } = useApi(`/api/games/now?_=${refreshKey}`);
   const [selected, setSelected] = useState(null); // { game, mode: 'sheet'|'beaten'|'retired', isOngoing? }
   const [staleGames, setStaleGames] = useState([]);
@@ -110,6 +110,11 @@ export default function Now({ refreshKey = 0, onGameAction }) {
           title={selected.game.title}
           onClose={close}
           actions={[
+            {
+              label: 'Guide',
+              description: 'View or add a walkthrough guide',
+              onClick: () => { close(); onOpenGuide?.(selected.game.igdb_id, selected.game.title); },
+            },
             {
               label: 'Mark Beaten',
               description: 'Record completion with a rating and debrief',

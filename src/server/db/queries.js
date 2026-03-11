@@ -277,13 +277,18 @@ export function setOngoing(userId, igdbId) {
 }
 
 /**
- * Restore a backburner game to in_progress (Move to Now).
+ * Restore a backburner (or unplayed) game to in_progress (Move to Now).
+ * Bumps playtime to the Now threshold if the game has never been played,
+ * so it clears the minimum-playtime filter and appears in the Now view immediately.
  */
 export function restoreToNow(userId, igdbId) {
   getDb().prepare(`
-    UPDATE user_games SET status = 'in_progress', updated_at = CURRENT_TIMESTAMP
+    UPDATE user_games
+    SET status = 'in_progress',
+        playtime_minutes = MAX(playtime_minutes, :threshold),
+        updated_at = CURRENT_TIMESTAMP
     WHERE user_id = :userId AND igdb_id = :igdbId
-  `).run({ userId, igdbId });
+  `).run({ userId, igdbId, threshold: NOW_THRESHOLD_MINUTES });
 }
 
 /**
@@ -855,4 +860,49 @@ export function snoozeSuggestion(userId, igdbId) {
     UPDATE user_games SET snoozed_until = :snoozedUntil, updated_at = CURRENT_TIMESTAMP
     WHERE user_id = :userId AND igdb_id = :igdbId
   `).run({ snoozedUntil, userId, igdbId });
+}
+
+// ---------------------------------------------------------------------------
+// Guides
+// ---------------------------------------------------------------------------
+
+export function listGuides(userId, igdbId) {
+  return getDb().prepare(`
+    SELECT id, igdb_id, source_url, title, content_type, content_length,
+           fetched_at, scroll_position, last_read_at, parse_warning, created_at
+    FROM guides
+    WHERE user_id = ? AND igdb_id = ?
+    ORDER BY created_at DESC
+  `).all(userId, igdbId);
+}
+
+export function getGuideContent(userId, guideId) {
+  return getDb().prepare(`
+    SELECT id, igdb_id, source_url, title, content, content_type,
+           scroll_position, parse_warning, fetched_at
+    FROM guides
+    WHERE id = ? AND user_id = ?
+  `).get(guideId, userId);
+}
+
+export function createGuide(userId, { igdbId, sourceUrl, title, content, contentType, contentLength, parseWarning }) {
+  const db = getDb();
+  const result = db.prepare(`
+    INSERT INTO guides
+      (user_id, igdb_id, source_url, title, content, content_type, content_length, parse_warning, fetched_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+  `).run(userId, igdbId, sourceUrl, title, content, contentType, contentLength, parseWarning ? 1 : 0);
+  return db.prepare('SELECT * FROM guides WHERE id = ?').get(result.lastInsertRowid);
+}
+
+export function updateGuideScroll(userId, guideId, scrollPosition) {
+  getDb().prepare(`
+    UPDATE guides
+    SET scroll_position = ?, last_read_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND user_id = ?
+  `).run(scrollPosition, guideId, userId);
+}
+
+export function deleteGuide(userId, guideId) {
+  getDb().prepare('DELETE FROM guides WHERE id = ? AND user_id = ?').run(guideId, userId);
 }

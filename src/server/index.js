@@ -12,6 +12,7 @@ import igdbRouter from './routes/igdb.js';
 import hltbRouter from './routes/hltb.js';
 import gamesRouter from './routes/games.js';
 import tasteRouter from './routes/taste.js';
+import guidesRouter from './routes/guides.js';
 
 const PORT = process.env.PORT || 3000;
 
@@ -73,6 +74,7 @@ app.use('/api/igdb', igdbRouter);
 app.use('/api/hltb', hltbRouter);
 app.use('/api/games', gamesRouter);
 app.use('/api/taste', tasteRouter);
+app.use('/api/guides', guidesRouter);
 
 // Serve built React app (production / Docker)
 const distPath = join(__dirname, '../../dist');

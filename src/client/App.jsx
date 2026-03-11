@@ -5,6 +5,8 @@ import Now from './views/Now.jsx';
 import Next from './views/Next.jsx';
 import Done from './views/Done.jsx';
 import History from './views/History.jsx';
+import GuideSheet from './components/GuideSheet.jsx';
+import GuideReader from './components/GuideReader.jsx';
 
 const TABS = [
   { id: 'now',     label: 'Now',     icon: '▶' },
@@ -16,9 +18,21 @@ const TABS = [
 export default function App() {
   const [tab, setTab] = useState('now');
   const [refreshKey, setRefreshKey] = useState(0);
+  // { igdbId, gameTitle } — shows guide list sheet
+  const [guideSheet, setGuideSheet] = useState(null);
+  // { guideId, gameTitle } — shows full-screen reader
+  const [guideReader, setGuideReader] = useState(null);
 
   function handleSyncComplete() {
     setRefreshKey(k => k + 1);
+  }
+
+  function openGuideSheet(igdbId, gameTitle) {
+    setGuideSheet({ igdbId, gameTitle });
+  }
+
+  function openGuideReader(guideId) {
+    setGuideReader({ guideId, gameTitle: guideSheet?.gameTitle ?? '' });
   }
 
   return (
@@ -28,12 +42,31 @@ export default function App() {
         <SyncButton onComplete={handleSyncComplete} />
       </header>
       <main className="flex-1 overflow-y-auto">
-        {tab === 'now'     && <Now     refreshKey={refreshKey} onGameAction={handleSyncComplete} />}
-        {tab === 'next'    && <Next    refreshKey={refreshKey} onGameAction={handleSyncComplete} />}
+        {tab === 'now'     && <Now     refreshKey={refreshKey} onGameAction={handleSyncComplete} onOpenGuide={openGuideSheet} />}
+        {tab === 'next'    && <Next    refreshKey={refreshKey} onGameAction={handleSyncComplete} onOpenGuide={openGuideSheet} />}
         {tab === 'done'    && <Done    refreshKey={refreshKey} />}
         {tab === 'history' && <History />}
       </main>
       <TabBar tabs={TABS} active={tab} onChange={setTab} />
+
+      {/* Guide sheet — sits above tab bar */}
+      {guideSheet && (
+        <GuideSheet
+          igdbId={guideSheet.igdbId}
+          gameTitle={guideSheet.gameTitle}
+          onClose={() => setGuideSheet(null)}
+          onOpenReader={openGuideReader}
+        />
+      )}
+
+      {/* Guide reader — full screen, above everything */}
+      {guideReader && (
+        <GuideReader
+          guideId={guideReader.guideId}
+          gameTitle={guideReader.gameTitle}
+          onClose={() => setGuideReader(null)}
+        />
+      )}
     </div>
   );
 }
