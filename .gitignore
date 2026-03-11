@@ -13,3 +13,4 @@ Thumbs.db
 
 # Build output (Phase 2+)
 /dist/
+deploy.ps1
