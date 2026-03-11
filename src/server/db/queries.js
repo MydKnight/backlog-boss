@@ -28,6 +28,51 @@ export function updateUserSteamCredentials(userId, { steamApiKey, steamId }) {
   `).run({ steamApiKey, steamId, userId });
 }
 
+export function getUserByEmail(email) {
+  return getDb().prepare('SELECT * FROM users WHERE email = ?').get(email);
+}
+
+/**
+ * Create a stub user for a new CF-authenticated email.
+ * No Steam credentials — they'll be entered via Onboarding.
+ */
+export function createUserByEmail(email) {
+  const db = getDb();
+  const ollamaEndpoint = process.env.OLLAMA_ENDPOINT || 'http://localhost:11434';
+  const ollamaModel = process.env.OLLAMA_MODEL || 'qwen2.5:14b';
+  const ollamaEmbedModel = process.env.OLLAMA_EMBED_MODEL || 'nomic-embed-text';
+
+  // Use the part before @ as default username
+  const username = email.split('@')[0] || 'user';
+
+  db.prepare(`
+    INSERT INTO users (username, email, ollama_endpoint, ollama_model, ollama_embed_model)
+    VALUES (:username, :email, :ollamaEndpoint, :ollamaModel, :ollamaEmbedModel)
+  `).run({ username, email, ollamaEndpoint, ollamaModel, ollamaEmbedModel });
+
+  return getUserByEmail(email);
+}
+
+/**
+ * Update user profile settings (username and/or Steam credentials).
+ * Only updates fields that are explicitly provided (not null/undefined).
+ */
+export function updateUserSettings(userId, { username, steamApiKey, steamId }) {
+  const db = getDb();
+  if (username !== undefined && username !== null) {
+    db.prepare(`UPDATE users SET username = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+      .run(username, userId);
+  }
+  if (steamApiKey !== undefined && steamApiKey !== null) {
+    db.prepare(`UPDATE users SET steam_api_key = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+      .run(steamApiKey, userId);
+  }
+  if (steamId !== undefined && steamId !== null) {
+    db.prepare(`UPDATE users SET steam_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+      .run(steamId, userId);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Games (canonical IGDB records)
 // ---------------------------------------------------------------------------

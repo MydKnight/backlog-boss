@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import {
-  getDefaultUser,
   getInProgressGames,
   getOngoingGames,
   getUnplayedGames,
@@ -47,8 +46,7 @@ function parseGame(game) {
  * In-progress games sorted by proximity to completion, plus ongoing (Always On) games.
  */
 router.get('/now', (req, res) => {
-  const user = getDefaultUser();
-  if (!user) return res.status(500).json({ error: 'No user configured.' });
+  const user = req.user;
 
   const games = getInProgressGames(user.id).map(parseGame);
   const ongoing = getOngoingGames(user.id).map(g => ({
@@ -68,8 +66,7 @@ router.get('/now', (req, res) => {
  * Unplayed + backburner games sorted alphabetically (taste ranking added in Phase 4).
  */
 router.get('/next', (req, res) => {
-  const user = getDefaultUser();
-  if (!user) return res.status(500).json({ error: 'No user configured.' });
+  const user = req.user;
 
   const games = getUnplayedGames(user.id).map(g => ({
     ...parseGame(g),
@@ -83,8 +80,7 @@ router.get('/next', (req, res) => {
  * Completed games sorted by most recently beaten.
  */
 router.get('/done', (req, res) => {
-  const user = getDefaultUser();
-  if (!user) return res.status(500).json({ error: 'No user configured.' });
+  const user = req.user;
 
   const games = getCompletedGames(user.id).map(g => ({
     id: g.id,
@@ -105,8 +101,7 @@ router.get('/done', (req, res) => {
  * Body: { starRating, positiveTags, negativeTags, freeText }
  */
 router.post('/:igdbId/beaten', (req, res) => {
-  const user = getDefaultUser();
-  if (!user) return res.status(500).json({ error: 'No user configured.' });
+  const user = req.user;
 
   const igdbId = parseInt(req.params.igdbId);
   const { starRating, positiveTags, negativeTags, freeText } = req.body;
@@ -124,8 +119,7 @@ router.post('/:igdbId/beaten', (req, res) => {
  * Body: { starRating, positiveTags, negativeTags, freeText }
  */
 router.post('/:igdbId/retired', (req, res) => {
-  const user = getDefaultUser();
-  if (!user) return res.status(500).json({ error: 'No user configured.' });
+  const user = req.user;
 
   const igdbId = parseInt(req.params.igdbId);
   const { starRating, positiveTags, negativeTags, freeText } = req.body;
@@ -143,8 +137,7 @@ router.post('/:igdbId/retired', (req, res) => {
  * All history-interview entries, sorted by most recently logged.
  */
 router.get('/history', (req, res) => {
-  const user = getDefaultUser();
-  if (!user) return res.status(500).json({ error: 'No user configured.' });
+  const user = req.user;
 
   const games = getHistoryGames(user.id).map(g => ({
     igdb_id: g.igdb_id,
@@ -166,8 +159,7 @@ router.get('/history', (req, res) => {
  * Log a previously played game. Body: { igdbData, starRating, positiveTags, freeText }
  */
 router.post('/history', (req, res) => {
-  const user = getDefaultUser();
-  if (!user) return res.status(500).json({ error: 'No user configured.' });
+  const user = req.user;
 
   const { igdbData, starRating, positiveTags, freeText } = req.body;
   if (!igdbData?.igdbId) return res.status(400).json({ error: 'igdbData.igdbId required' });
@@ -186,8 +178,7 @@ router.post('/history', (req, res) => {
  * Add a non-Steam game to Now. Body: { igdbData, ownershipType, playtimeMinutes }
  */
 router.post('/currently-playing', (req, res) => {
-  const user = getDefaultUser();
-  if (!user) return res.status(500).json({ error: 'No user configured.' });
+  const user = req.user;
 
   const { igdbData, ownershipType, playtimeMinutes } = req.body;
   if (!igdbData?.igdbId) return res.status(400).json({ error: 'igdbData.igdbId required' });
@@ -212,8 +203,7 @@ router.post('/currently-playing', (req, res) => {
  * Preserves game_events and game_interviews history.
  */
 router.post('/:igdbId/revert', (req, res) => {
-  const user = getDefaultUser();
-  if (!user) return res.status(500).json({ error: 'No user configured.' });
+  const user = req.user;
 
   const igdbId = parseInt(req.params.igdbId);
   try {
@@ -229,8 +219,7 @@ router.post('/:igdbId/revert', (req, res) => {
  * Push a Now game to backburner — persists across Steam syncs.
  */
 router.post('/:igdbId/set-backburner', (req, res) => {
-  const user = getDefaultUser();
-  if (!user) return res.status(500).json({ error: 'No user configured.' });
+  const user = req.user;
 
   const igdbId = parseInt(req.params.igdbId);
   try {
@@ -246,8 +235,7 @@ router.post('/:igdbId/set-backburner', (req, res) => {
  * Mark a game as ongoing (live service / no completion state).
  */
 router.post('/:igdbId/set-ongoing', (req, res) => {
-  const user = getDefaultUser();
-  if (!user) return res.status(500).json({ error: 'No user configured.' });
+  const user = req.user;
 
   const igdbId = parseInt(req.params.igdbId);
   try {
@@ -263,8 +251,7 @@ router.post('/:igdbId/set-ongoing', (req, res) => {
  * Move a backburner game back to in_progress (Now view).
  */
 router.post('/:igdbId/restore-to-now', (req, res) => {
-  const user = getDefaultUser();
-  if (!user) return res.status(500).json({ error: 'No user configured.' });
+  const user = req.user;
 
   const igdbId = parseInt(req.params.igdbId);
   try {
@@ -280,8 +267,7 @@ router.post('/:igdbId/restore-to-now', (req, res) => {
  * Games with no HLTB data and > 10h playtime — likely live service / sandbox candidates.
  */
 router.get('/ongoing-candidates', (req, res) => {
-  const user = getDefaultUser();
-  if (!user) return res.status(500).json({ error: 'No user configured.' });
+  const user = req.user;
 
   const games = getOngoingCandidates(user.id).map(g => ({
     igdb_id: g.igdb_id,

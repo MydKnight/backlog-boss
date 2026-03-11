@@ -98,14 +98,16 @@ The PWA must function offline for reading (guides, library, Done/History views).
 
 | Phase | Deliverable |
 |---|---|
-| 1 | Docker setup, Steam sync, IGDB enrichment, HLTB lookup, DB schema |
-| 2 | React PWA, four views (Now/Next/Done/History), exit interview flows |
-| 3 | Ongoing/infinite game type — `ongoing` status, "Always On" section, auto-detection |
-| 4 | Ollama taste engine, suggestion ranking, Next view LLM integration |
-| 5 | Guide reader (URL ingest, Readability parse, offline storage, scroll position) |
-| 6 | Multi-user auth, per-user Steam keys, scoped queries |
+| 1 ✅ | Docker setup, Steam sync, IGDB enrichment, HLTB lookup, DB schema |
+| 2 ✅ | React PWA, four views (Now/Next/Done/History), exit interview flows |
+| 3 ✅ | Ongoing/infinite game type — `ongoing` status, "Always On" section, auto-detection |
+| 4 ✅ | Ollama taste engine, suggestion ranking, Next view LLM integration |
+| 5 ✅ | Guide reader (URL ingest, Readability parse, offline storage, scroll position) |
+| 6 ✅ | Data quality tools — HLTB/IGDB manual triage, igdb_ignored flag |
+| 7 ✅ | Guide source search + paste content mode |
+| 8 ✅ | Multi-user auth via Cloudflare Access, per-user settings, onboarding flow |
 
-**Current phase:** Phase 2 (in progress — on checkpoint 2.2).
+**Current phase:** All phases complete. App is build-complete and ready for deployment.
 
 ---
 
@@ -151,24 +153,24 @@ The PWA must function offline for reading (guides, library, Done/History views).
 ## What "Done" Looks Like Per Phase
 
 ### Phase 1 Done
-- [ ] Docker container builds and runs on QNAP NAS
-- [ ] `.env` wired, DB initializes on first run
-- [ ] Steam sync populates `games` and `user_games` tables
-- [ ] IGDB enrichment runs after Steam sync, fills `games` with metadata
-- [ ] HLTB lookup runs for each game, stored on `games` table
-- [ ] `sync_log` records each sync operation
-- [ ] Manual sync endpoint exists (`POST /api/sync`)
+- [x] Docker container builds and runs on QNAP NAS
+- [x] `.env` wired, DB initializes on first run
+- [x] Steam sync populates `games` and `user_games` tables
+- [x] IGDB enrichment runs after Steam sync, fills `games` with metadata
+- [x] HLTB lookup runs for each game, stored on `games` table
+- [x] `sync_log` records each sync operation
+- [x] Manual sync endpoint exists (`POST /api/sync`)
 
 ### Phase 2 Done
-- [ ] PWA installable on iOS/Android home screen
-- [ ] Now view shows in-progress games sorted by estimated % complete
-- [ ] Next view shows unplayed games (unsorted at this phase)
-- [ ] Done view shows completed games with ratings
-- [ ] History view: IGDB search with "Log to History" (light interview) and "Currently Playing" (platform picker → ownership_type, lands in Now)
-- [ ] "Mark Beaten" flow with full exit interview
-- [ ] "Mark Retired" flow with reason tags and optional notes
-- [ ] Sync button in UI triggers backend sync
-- [ ] App is usable offline for browsing (no sync)
+- [x] PWA installable on iOS/Android home screen
+- [x] Now view shows in-progress games sorted by estimated % complete
+- [x] Next view shows unplayed games (unsorted at this phase)
+- [x] Done view shows completed games with ratings
+- [x] History view: IGDB search with "Log to History" (light interview) and "Currently Playing" (platform picker → ownership_type, lands in Now)
+- [x] "Mark Beaten" flow with full exit interview
+- [x] "Mark Retired" flow with reason tags and optional notes
+- [x] Sync button in UI triggers backend sync
+- [x] App is usable offline for browsing (no sync)
 
 #### Phase 2 Commit Decomposition
 Phase 2 is split into four tested-then-committed checkpoints:
@@ -190,18 +192,18 @@ IGDB search endpoint + UI, manual game logging flow (lighter interview), logged
 games appear in Done/History.
 
 ### Phase 3 Done
-- [ ] `ongoing` status added to `user_games` (additive — safe across syncs)
-- [ ] "Mark as Ongoing" flow on Now cards (no interview, just status change)
-- [ ] Now view renders `ongoing` games in a separate "Always On" section without HLTB bar
-- [ ] Next view excludes `ongoing` games
-- [ ] Done view excludes `ongoing` games
-- [ ] Exit path from `ongoing` is `retired` (existing flow)
-- [ ] Auto-detection heuristic surfaces candidates (HLTB null + playtime > 10h) for confirmation
-- [ ] `backburner` status added to `user_games` (additive, added to protected statuses in Steam sync)
-- [ ] "→ Next" quick action on Now cards sets `backburner` (replaces current `unplayed` approach)
-- [ ] `backburner` games shown in Next alongside unplayed games
-- [ ] `backburner` games excluded from Now even if playtime >= threshold
-- [ ] "Move to Now" action on backburner games in Next restores `in_progress`
+- [x] `ongoing` status added to `user_games` (additive — safe across syncs)
+- [x] "Mark as Ongoing" flow on Now cards (no interview, just status change)
+- [x] Now view renders `ongoing` games in a separate "Always On" section without HLTB bar
+- [x] Next view excludes `ongoing` games
+- [x] Done view excludes `ongoing` games
+- [x] Exit path from `ongoing` is `retired` (existing flow)
+- [x] Auto-detection heuristic surfaces candidates (HLTB null + playtime > 10h) for confirmation
+- [x] `backburner` status added to `user_games` (additive, added to protected statuses in Steam sync)
+- [x] "→ Next" quick action on Now cards sets `backburner` (replaces current `unplayed` approach)
+- [x] `backburner` games shown in Next alongside unplayed games
+- [x] `backburner` games excluded from Now even if playtime >= threshold
+- [x] "Move to Now" action on backburner games in Next restores `in_progress`
 
 #### Phase 3 Commit Decomposition
 Phase 3 is split into two tested-then-committed checkpoints:
@@ -220,27 +222,27 @@ backburner games included with visual indicator, "Move to Now" action. Auto-dete
 banner for HLTB-null + playtime > 10h candidates.
 
 ### Phase 4 Done
-- [ ] Ollama integration service functional
-- [ ] Taste profile context builder assembles correct payload
-- [ ] `ongoing` and `backburner` games handled correctly in context payload
-- [ ] Custom tag input added to exit interviews (free-form, stored in existing JSON arrays)
-- [ ] LLM prompt handles both predefined tag vocabulary and custom tags
-- [ ] Snapshot generated and stored on demand
-- [ ] Next view displays LLM-ranked suggestions with explanations
-- [ ] "Refresh Suggestions" button triggers new snapshot if context changed
-- [ ] Retired and ongoing games correctly excluded from candidates
-- [ ] **Series/franchise enrichment (4.2 additive):**
+- [x] Ollama integration service functional
+- [x] Taste profile context builder assembles correct payload
+- [x] `ongoing` and `backburner` games handled correctly in context payload
+- [x] Custom tag input added to exit interviews (free-form, stored in existing JSON arrays)
+- [x] LLM prompt handles both predefined tag vocabulary and custom tags
+- [x] Snapshot generated and stored on demand
+- [x] Next view displays LLM-ranked suggestions with explanations
+- [x] "Refresh Suggestions" button triggers new snapshot if context changed
+- [x] Retired and ongoing games correctly excluded from candidates
+- [x] **Series/franchise enrichment (4.2 additive):**
   - `collection_id`, `collection_name`, `franchise_names` columns added to `games` table
   - IGDB enrichment service updated to fetch `collection` and `franchises` fields
   - Pre-filter scoring updated: unplayed games in same series as a 4★+ completion get +4 boost
   - Series label shown on game cards in Now/Next/Done views
   - Re-enrichment runs on next sync (lazy — only games not yet enriched with collection data)
-- [ ] **Canonical duplicate linking (4.2 additive):**
+- [x] **Canonical duplicate linking (4.2 additive):**
   - `canonical_igdb_id` nullable column added to `user_games`
   - Taste engine uses canonical game's signals when set
   - UI shows "duplicate of X" indicator on affected cards
   - User manually flags duplicates (e.g. Bioshock + Bioshock Remastered)
-- [ ] **"Add to Backlog" flow in History tab (4.2 additive):**
+- [x] **"Add to Backlog" flow in History tab (4.2 additive):**
   - Third action in History search action sheet alongside "Log to History" and "Currently Playing"
   - Platform picker (PS5/Switch/Other) — no playtime, no interview
   - Creates `user_games` row with `status = unplayed`, `ownership_type = owned_*`
@@ -248,17 +250,34 @@ banner for HLTB-null + playtime > 10h candidates.
   - Enables non-Steam owned games that haven't been started (PS5 backlog, bundle games)
 
 ### Phase 5 Done
-- [ ] Guide URL input per game
-- [ ] Server-side fetch + Readability parse
-- [ ] Guide stored locally, accessible offline
-- [ ] Mobile reader UI renders cleaned content
-- [ ] Scroll position persisted and restored on reopen
+- [x] Guide URL input per game
+- [x] Server-side fetch + Readability parse
+- [x] Guide stored locally, accessible offline
+- [x] Mobile reader UI renders cleaned content
+- [x] Scroll position persisted and restored on reopen
 
 ### Phase 6 Done
-- [ ] Auth layer (username/password minimum)
-- [ ] Per-user Steam API key storage
-- [ ] All queries scoped to authenticated user
-- [ ] Basic account settings page
+- [x] Admin panel (data quality tools)
+- [x] Games-without-HLTB triage list with manual HLTB search + pin
+- [x] Games-without-IGDB triage list with manual IGDB search + relink
+- [x] `igdb_ignored` flag for permanently unresolvable entries (DLC, test servers, duplicates)
+
+### Phase 7 Done
+- [x] `GET /api/guides/search?igdbId=` — parallel search across StrategyWiki, TrueAchievements, TrueTrophies
+- [x] GuideSheet redesigned with three add modes: Search | Paste URL | Paste Content
+- [x] Paste Content mode: auto-detects HTML vs plain text, runs Readability on HTML
+- [x] GameFAQs accessible via Paste Content (CF bot protection blocks server-side fetch)
+
+### Phase 8 Done
+- [x] Auth via `Cf-Access-Authenticated-User-Email` header (Cloudflare Zero Trust)
+- [x] `src/server/middleware/auth.js` — populates `req.user`; dev fallback to `getDefaultUser()`
+- [x] New users auto-created on first request; onboarding screen prompts for Steam credentials
+- [x] `OWNER_EMAIL` env var links existing owner row to CF identity on first startup
+- [x] `GET /api/me` + `PATCH /api/me` — user profile and credential management
+- [x] `Onboarding.jsx` — full-screen setup flow for new users (Steam API key + Steam ID + display name)
+- [x] `Settings.jsx` — in-app credential update (accessible from ⚙ button)
+- [x] All route files updated to use `req.user` — `getDefaultUser()` removed from all routes
+- [x] `email` column + partial UNIQUE INDEX added to `users` table (additive migration)
 
 ---
 

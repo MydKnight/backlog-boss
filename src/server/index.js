@@ -4,7 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { join, dirname } from 'node:path';
 import { existsSync } from 'node:fs';
 import { getDb } from './db/schema.js';
-import { getDefaultUser, createDefaultUser } from './db/queries.js';
+import { getDefaultUser, createDefaultUser, getUserByEmail } from './db/queries.js';
+import { authMiddleware } from './middleware/auth.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 import syncRouter from './routes/sync.js';
@@ -14,6 +15,7 @@ import gamesRouter from './routes/games.js';
 import tasteRouter from './routes/taste.js';
 import guidesRouter from './routes/guides.js';
 import adminRouter from './routes/admin.js';
+import usersRouter from './routes/users.js';
 
 const PORT = process.env.PORT || 3000;
 
@@ -49,6 +51,16 @@ if (!getDefaultUser()) {
       WHERE id = ?
     `).run(process.env.STEAM_API_KEY, process.env.STEAM_ID, user.id);
   }
+
+  // Phase 8: link existing owner row to OWNER_EMAIL if not already set
+  if (process.env.OWNER_EMAIL && !user.email) {
+    const emailTaken = getUserByEmail(process.env.OWNER_EMAIL);
+    if (!emailTaken) {
+      db.prepare(`UPDATE users SET email = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+        .run(process.env.OWNER_EMAIL, user.id);
+      console.log(`Owner account linked to ${process.env.OWNER_EMAIL}`);
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -58,7 +70,7 @@ if (!getDefaultUser()) {
 const app = express();
 app.use(express.json({ limit: '10mb' }));
 
-// Health check
+// Health check (unauthenticated — used by Docker/infra probes)
 app.get('/api/health', (req, res) => {
   const user = getDefaultUser();
   res.json({
@@ -70,6 +82,10 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Auth middleware — populates req.user on all /api routes except /api/health
+app.use('/api', authMiddleware);
+
+app.use('/api/me', usersRouter);
 app.use('/api/sync', syncRouter);
 app.use('/api/igdb', igdbRouter);
 app.use('/api/hltb', hltbRouter);

@@ -195,4 +195,15 @@ export function initSchema(db) {
     db.exec("ALTER TABLE guides ADD COLUMN parse_warning INTEGER NOT NULL DEFAULT 0");
     console.log('Migration: added parse_warning to guides');
   }
+
+  // Phase 8: email column for CF Access identity
+  // Re-fetch usersCols since it may have been populated above
+  const usersCols2 = db.prepare("PRAGMA table_info(users)").all().map(c => c.name);
+  if (!usersCols2.includes('email')) {
+    db.exec("ALTER TABLE users ADD COLUMN email TEXT");
+    console.log('Migration: added email to users');
+    // Create unique index (partial — allows multiple NULLs, enforces uniqueness for non-null)
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL");
+    console.log('Migration: created unique index on users.email');
+  }
 }

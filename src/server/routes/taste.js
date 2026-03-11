@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import crypto from 'node:crypto';
 import {
-  getDefaultUser,
   getTasteContext,
   getLatestTasteSnapshot,
   saveTasteSnapshot,
@@ -46,8 +45,7 @@ const inferenceJob = {
  * GET /api/taste/health
  */
 router.get('/health', async (req, res) => {
-  const user = getDefaultUser();
-  if (!user) return res.status(500).json({ error: 'No user configured.' });
+  const user = req.user;
 
   const [inferenceHealth, embedHealth] = await Promise.all([
     checkOllamaHealth(user.ollama_endpoint, user.ollama_model),
@@ -69,8 +67,7 @@ router.get('/health', async (req, res) => {
  * GET /api/taste/snapshot
  */
 router.get('/snapshot', (req, res) => {
-  const user = getDefaultUser();
-  if (!user) return res.status(500).json({ error: 'No user configured.' });
+  const user = req.user;
 
   const snapshot = getLatestTasteSnapshot(user.id);
   if (!snapshot) return res.json({ snapshot: null });
@@ -95,8 +92,7 @@ router.get('/snapshot', (req, res) => {
  * Poll GET /api/taste/embed-status for progress.
  */
 router.post('/embed-games', async (req, res) => {
-  const user = getDefaultUser();
-  if (!user) return res.status(500).json({ error: 'No user configured.' });
+  const user = req.user;
 
   if (embedJob.status === 'running') {
     return res.json({
@@ -211,8 +207,7 @@ router.get('/status', (req, res) => {
  * Returns immediately. Poll GET /api/taste/status, then GET /api/taste/snapshot.
  */
 router.post('/refresh', async (req, res) => {
-  const user = getDefaultUser();
-  if (!user) return res.status(500).json({ error: 'No user configured.' });
+  const user = req.user;
 
   if (inferenceJob.status === 'generating') {
     return res.json({
@@ -434,8 +429,7 @@ One sentence. No preamble.`;
  * POST /api/taste/snooze/:igdbId
  */
 router.post('/snooze/:igdbId', (req, res) => {
-  const user = getDefaultUser();
-  if (!user) return res.status(500).json({ error: 'No user configured.' });
+  const user = req.user;
 
   const igdbId = parseInt(req.params.igdbId);
   try {
@@ -451,8 +445,7 @@ router.post('/snooze/:igdbId', (req, res) => {
  * Quick 3-game test using the new per-game explanation approach.
  */
 router.post('/test-prompt', async (req, res) => {
-  const user = getDefaultUser();
-  if (!user) return res.status(500).json({ error: 'No user configured.' });
+  const user = req.user;
 
   const context = getTasteContext(user.id);
   const profileSummary = buildProfileSummary(context.completedGames, context.retiredGames);
@@ -475,8 +468,7 @@ router.post('/test-prompt', async (req, res) => {
  * GET /api/taste/context-preview
  */
 router.get('/context-preview', (req, res) => {
-  const user = getDefaultUser();
-  if (!user) return res.status(500).json({ error: 'No user configured.' });
+  const user = req.user;
 
   const context = getTasteContext(user.id);
   const eligible = getEligibleCandidateIds(user.id);

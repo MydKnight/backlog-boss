@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import { getDefaultUser } from '../db/queries.js';
 import {
   getGamesWithoutHltb,
   getGamesWithoutIgdb,
@@ -22,8 +21,7 @@ const router = Router();
  * Returns two lists: games missing HLTB data and games missing IGDB match.
  */
 router.get('/unmatched', (req, res) => {
-  const user = getDefaultUser();
-  if (!user) return res.status(500).json({ error: 'No user configured.' });
+  const user = req.user;
 
   const noHltb = getGamesWithoutHltb(user.id).map(g => ({
     id: g.id,
@@ -122,8 +120,7 @@ router.get('/igdb-search', async (req, res) => {
  * Body: { steamAppId, igdbData: { igdbId, title, coverUrl, genres, themes, similarIgdbIds } }
  */
 router.post('/igdb-relink', (req, res) => {
-  const user = getDefaultUser();
-  if (!user) return res.status(500).json({ error: 'No user configured.' });
+  const user = req.user;
 
   const { steamAppId, igdbData } = req.body;
   if (!steamAppId || !igdbData?.igdbId) {

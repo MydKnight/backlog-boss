@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getDefaultUser, getGameByIgdbId } from '../db/queries.js';
+import { getGameByIgdbId } from '../db/queries.js';
 import {
   listGuides,
   getGuideContent,
@@ -47,8 +47,7 @@ router.get('/search', async (req, res) => {
  * Full guide content — cached by service worker for offline access.
  */
 router.get('/content/:guideId', (req, res) => {
-  const user = getDefaultUser();
-  if (!user) return res.status(500).json({ error: 'No user configured.' });
+  const user = req.user;
 
   const guideId = parseInt(req.params.guideId);
   if (isNaN(guideId)) return res.status(400).json({ error: 'Invalid guideId.' });
@@ -74,8 +73,7 @@ router.get('/content/:guideId', (req, res) => {
  * List all guides for a game (metadata only — no content payload).
  */
 router.get('/:igdbId', (req, res) => {
-  const user = getDefaultUser();
-  if (!user) return res.status(500).json({ error: 'No user configured.' });
+  const user = req.user;
 
   const igdbId = parseInt(req.params.igdbId);
   if (isNaN(igdbId)) return res.status(400).json({ error: 'Invalid igdbId.' });
@@ -102,8 +100,7 @@ router.get('/:igdbId', (req, res) => {
  *              for correct relative image resolution
  */
 router.post('/', async (req, res) => {
-  const user = getDefaultUser();
-  if (!user) return res.status(500).json({ error: 'No user configured.' });
+  const user = req.user;
 
   const { igdbId, url, pastedContent, title: pastedTitle, sourceUrl } = req.body;
 
@@ -160,8 +157,7 @@ router.post('/', async (req, res) => {
  * Body: { scrollPosition: number }
  */
 router.patch('/:guideId/scroll', (req, res) => {
-  const user = getDefaultUser();
-  if (!user) return res.status(500).json({ error: 'No user configured.' });
+  const user = req.user;
 
   const guideId = parseInt(req.params.guideId);
   const { scrollPosition } = req.body;
@@ -178,8 +174,7 @@ router.patch('/:guideId/scroll', (req, res) => {
  * DELETE /api/guides/:guideId
  */
 router.delete('/:guideId', (req, res) => {
-  const user = getDefaultUser();
-  if (!user) return res.status(500).json({ error: 'No user configured.' });
+  const user = req.user;
 
   const guideId = parseInt(req.params.guideId);
   if (isNaN(guideId)) return res.status(400).json({ error: 'Invalid guideId.' });

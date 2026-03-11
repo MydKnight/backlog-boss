@@ -238,11 +238,14 @@ makes the Now view threshold a reliable curation tool.
   HTML auto-detected and run through Readability; plain text stored as-is; images display online only
   (offline image embedding is a post-MVP feature)
 
-### Phase 8 — Multi-User
-- Auth layer
-- Per-user Steam API key storage
-- User-scoped all queries
-- Basic account management
+### Phase 8 — Multi-User Auth ✅
+- **Identity via Cloudflare Zero Trust** — `Cf-Access-Authenticated-User-Email` header; no app-level passwords
+- Auth middleware resolves `req.user` from CF header; dev fallback to `getDefaultUser()` (no behaviour change locally)
+- New users auto-created on first request; onboarding overlay prompts for Steam API key + Steam ID
+- `OWNER_EMAIL` env var links the existing owner DB row to a CF identity on startup
+- `GET /api/me` / `PATCH /api/me` — profile and credential management
+- Account Settings accessible from ⚙ button (previously Data Quality only)
+- All route handlers use `req.user` — per-user data scoping was already in the DB layer
 
 ---
 

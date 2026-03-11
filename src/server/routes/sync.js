@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getDefaultUser, getRecentSyncLogs, demoteStaleInProgressGames } from '../db/queries.js';
+import { getRecentSyncLogs, demoteStaleInProgressGames } from '../db/queries.js';
 import { syncSteamLibrary } from '../services/steam.js';
 import { enrichGamesFromIgdb } from '../services/igdb.js';
 import { lookupHltbForAllGames } from '../services/hltb.js';
@@ -12,7 +12,7 @@ const router = Router();
  * Each phase is independent — failures are logged but don't abort subsequent phases.
  */
 router.post('/', async (req, res) => {
-  const user = getDefaultUser();
+  const user = req.user;
   if (!user) {
     return res.status(500).json({ error: 'No user configured. Check server setup.' });
   }
@@ -87,8 +87,7 @@ router.post('/', async (req, res) => {
  * Returns the 10 most recent sync log entries for the default user.
  */
 router.get('/status', (req, res) => {
-  const user = getDefaultUser();
-  if (!user) return res.status(500).json({ error: 'No user configured.' });
+  const user = req.user;
 
   const logs = getRecentSyncLogs(user.id, 10);
   res.json({ logs });
