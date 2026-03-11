@@ -57,15 +57,11 @@ export function createUserByEmail(email) {
  * Update user profile settings (username and/or Steam credentials).
  * Only updates fields that are explicitly provided (not null/undefined).
  */
-export function updateUserSettings(userId, { username, steamApiKey, steamId }) {
+export function updateUserSettings(userId, { username, steamId }) {
   const db = getDb();
   if (username !== undefined && username !== null) {
     db.prepare(`UPDATE users SET username = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
       .run(username, userId);
-  }
-  if (steamApiKey !== undefined && steamApiKey !== null) {
-    db.prepare(`UPDATE users SET steam_api_key = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
-      .run(steamApiKey, userId);
   }
   if (steamId !== undefined && steamId !== null) {
     db.prepare(`UPDATE users SET steam_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
@@ -853,7 +849,8 @@ export function getTasteContext(userId) {
   const retiredGames = db.prepare(`
     SELECT
       g.title, g.genres, g.themes,
-      gi.negative_tags, gi.free_text
+      ge.star_rating, ge.event_date,
+      gi.positive_tags, gi.negative_tags, gi.free_text
     FROM game_events ge
     JOIN games g ON g.igdb_id = ge.igdb_id
     LEFT JOIN game_interviews gi ON gi.game_event_id = ge.id
@@ -885,8 +882,11 @@ export function getTasteContext(userId) {
     retiredGames: retiredGames.map(g => ({
       title: g.title,
       genres: g.genres ? JSON.parse(g.genres) : [],
+      star_rating: g.star_rating ?? null,
+      positive_tags: g.positive_tags ? JSON.parse(g.positive_tags) : [],
       negative_tags: g.negative_tags ? JSON.parse(g.negative_tags) : [],
       free_text: g.free_text ?? null,
+      recency_weight: g.event_date > twelveMonthsAgo ? 'recent' : 'older',
     })),
     inProgressGames: inProgressGames.map(g => ({
       title: g.title,

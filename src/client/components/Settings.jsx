@@ -6,7 +6,6 @@ import { useState, useEffect } from 'react';
  */
 export default function Settings({ onClose, onSaved }) {
   const [username, setUsername] = useState('');
-  const [steamApiKey, setSteamApiKey] = useState('');
   const [steamId, setSteamId] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -33,7 +32,6 @@ export default function Settings({ onClose, onSaved }) {
 
     try {
       const body = { username: username.trim() };
-      if (steamApiKey.trim()) body.steamApiKey = steamApiKey.trim();
       if (steamId.trim()) body.steamId = steamId.trim();
 
       const res = await fetch('/api/me', {
@@ -43,7 +41,7 @@ export default function Settings({ onClose, onSaved }) {
       });
       if (!res.ok) throw new Error('Failed to save.');
 
-      const credentialsChanged = steamApiKey.trim() || steamId.trim();
+      const credentialsChanged = !!steamId.trim();
       setSuccess(true);
       onSaved?.();
 
@@ -79,19 +77,6 @@ export default function Settings({ onClose, onSaved }) {
                 type="text"
                 value={username}
                 onChange={e => setUsername(e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-slate-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm text-slate-300 mb-1">
-                Steam API Key {hadSteam && <span className="text-slate-500">(leave blank to keep current)</span>}
-              </label>
-              <input
-                type="password"
-                value={steamApiKey}
-                onChange={e => setSteamApiKey(e.target.value)}
-                placeholder={hadSteam ? '••••••••' : 'Enter key'}
                 className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-slate-500"
               />
             </div>

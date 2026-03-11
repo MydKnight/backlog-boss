@@ -16,7 +16,7 @@ router.get('/', (req, res) => {
     id: user.id,
     username: user.username,
     email: user.email ?? null,
-    steamConfigured: !!(user.steam_api_key && user.steam_id),
+    steamConfigured: !!user.steam_id,
     ollamaEndpoint: user.ollama_endpoint ?? null,
     ollamaModel: user.ollama_model ?? null,
   });
@@ -29,10 +29,10 @@ router.get('/', (req, res) => {
  */
 router.patch('/', async (req, res) => {
   const user = req.user;
-  const { username, steamApiKey, steamId } = req.body;
+  const { username, steamId } = req.body;
 
   try {
-    updateUserSettings(user.id, { username, steamApiKey, steamId });
+    updateUserSettings(user.id, { username, steamId });
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });

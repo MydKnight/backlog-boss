@@ -78,7 +78,7 @@ The embedding model (`nomic-embed-text`) is small (~274MB) and runs well on any 
 **To run:**
 - Docker
 - Ollama running somewhere accessible (local machine or NAS host) with your chosen models pulled
-- A [Steam API key](https://steamcommunity.com/dev/apikey) and your 64-bit Steam ID
+- A [Steam API key](https://steamcommunity.com/dev/apikey) (one per install — shared across all users) and your 64-bit Steam ID
 - [IGDB / Twitch API credentials](https://api-docs.igdb.com/#account-creation) (free)
 
 **For multi-user / remote access (optional):**
@@ -215,6 +215,5 @@ For the full picture:
 ## Roadmap
 
 - [ ] Provider-agnostic LLM interface (Ollama, Claude, OpenAI, etc.)
-- [ ] Single shared Steam API key option for multi-user installs
 - [ ] Achievement % as a completion signal (Steam API already integrated, just needs wiring)
 - [ ] Automated deploy workflow

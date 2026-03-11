@@ -6,7 +6,6 @@ import { useState } from 'react';
  */
 export default function Onboarding({ onComplete }) {
   const [username, setUsername] = useState('');
-  const [steamApiKey, setSteamApiKey] = useState('');
   const [steamId, setSteamId] = useState('');
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -14,8 +13,8 @@ export default function Onboarding({ onComplete }) {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!username.trim() || !steamApiKey.trim() || !steamId.trim()) {
-      setError('All three fields are required.');
+    if (!username.trim() || !steamId.trim()) {
+      setError('Both fields are required.');
       return;
     }
 
@@ -26,7 +25,7 @@ export default function Onboarding({ onComplete }) {
       const patchRes = await fetch('/api/me', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: username.trim(), steamApiKey: steamApiKey.trim(), steamId: steamId.trim() }),
+        body: JSON.stringify({ username: username.trim(), steamId: steamId.trim() }),
       });
       if (!patchRes.ok) throw new Error('Failed to save credentials.');
 
@@ -63,27 +62,6 @@ export default function Onboarding({ onComplete }) {
               placeholder="Your name"
               className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-slate-500"
             />
-          </div>
-
-          <div>
-            <label className="block text-sm text-slate-300 mb-1">Steam API Key</label>
-            <input
-              type="password"
-              value={steamApiKey}
-              onChange={e => setSteamApiKey(e.target.value)}
-              placeholder="Get it at steamcommunity.com/dev/apikey"
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-slate-500"
-            />
-            <p className="text-xs text-slate-500 mt-1">
-              <a
-                href="https://steamcommunity.com/dev/apikey"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline"
-              >
-                steamcommunity.com/dev/apikey
-              </a>
-            </p>
           </div>
 
           <div>

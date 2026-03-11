@@ -22,7 +22,7 @@ async function fetchWithRetry(url, retries = 3) {
 
 /**
  * Pull the user's full Steam library and upsert into games + user_games.
- * @param {{ id: number, steam_api_key: string, steam_id: string }} user
+ * @param {{ id: number, steam_id: string }} user
  * @returns {{ gamesUpdated: number, errors: string[] }}
  */
 export async function syncSteamLibrary(user) {
@@ -30,9 +30,12 @@ export async function syncSteamLibrary(user) {
   const errors = [];
   let gamesUpdated = 0;
 
+  const steamApiKey = process.env.STEAM_API_KEY;
+  if (!steamApiKey) throw new Error('STEAM_API_KEY environment variable is not set.');
+
   try {
     const url = `${STEAM_BASE}/IPlayerService/GetOwnedGames/v1/` +
-      `?key=${user.steam_api_key}` +
+      `?key=${steamApiKey}` +
       `&steamid=${user.steam_id}` +
       `&include_appinfo=true` +
       `&include_played_free_games=true` +

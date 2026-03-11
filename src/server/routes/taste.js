@@ -365,21 +365,33 @@ async function runBackgroundInference({ user, context, contextHash }) {
  * Kept short — this goes into every individual explanation call.
  */
 function buildProfileSummary(completedGames, retiredGames) {
-  const loved = completedGames
+  const completedSet = new Set(completedGames.map(g => g.title));
+
+  const allRated = [
+    ...completedGames,
+    ...retiredGames.filter(g => g.star_rating !== null),
+  ];
+
+  const loved = allRated
     .filter(g => g.star_rating >= 4)
     .map(g => {
-      const tags = [...(g.positive_tags ?? [])].join(', ');
+      const tags = [...(g.positive_tags ?? []), ...(g.negative_tags ?? [])].join(', ');
       const note = g.free_text ? ` ("${g.free_text.slice(0, 60)}")` : '';
-      return `${g.title} (${g.star_rating}★${tags ? ', ' + tags : ''}${note})`;
+      const dnf = !completedSet.has(g.title) ? ', dnf' : '';
+      return `${g.title} (${g.star_rating}★${tags ? ', ' + tags : ''}${dnf}${note})`;
     })
     .join('; ');
 
-  const disliked = retiredGames.map(g => {
+  // Avoidance signals: low-rated retired + unrated retired with tags
+  const avoided = [
+    ...allRated.filter(g => g.star_rating <= 2 && !completedSet.has(g.title)),
+    ...retiredGames.filter(g => g.star_rating === null && (g.negative_tags ?? []).length > 0),
+  ].map(g => {
     const tags = (g.negative_tags ?? []).join(', ');
     return `${g.title}${tags ? ' (' + tags + ')' : ''}`;
   }).join(', ');
 
-  return `Loved: ${loved || 'none yet'}. Abandoned: ${disliked || 'none'}.`;
+  return `Loved: ${loved || 'none yet'}. Avoided: ${avoided || 'none'}.`;
 }
 
 /**

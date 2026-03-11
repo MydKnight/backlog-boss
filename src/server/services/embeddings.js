@@ -52,24 +52,41 @@ function cosineSimilarity(a, b) {
  * @returns {string}
  */
 export function buildTasteProfileText(completedGames, retiredGames) {
-  const loved = completedGames
+  function formatGame(g, { didNotFinish = false } = {}) {
+    const tags = [...(g.positive_tags ?? []), ...(g.negative_tags ?? [])].join(', ');
+    const note = g.free_text ? ` "${g.free_text.slice(0, 100)}"` : '';
+    const genres = (g.genres ?? []).join(', ');
+    const dnf = didNotFinish ? ', did not finish' : '';
+    return `${g.title} (${g.star_rating}★, ${genres}${tags ? ', ' + tags : ''}${dnf}${note})`;
+  }
+
+  // Combine completed and rated retired games into the same tiers
+  const allRated = [
+    ...completedGames,
+    ...retiredGames.filter(g => g.star_rating !== null),
+  ];
+
+  const loved = allRated
     .filter(g => g.star_rating >= 4)
-    .map(g => {
-      const tags = [...(g.positive_tags ?? [])].join(', ');
-      const note = g.free_text ? ` "${g.free_text.slice(0, 100)}"` : '';
-      const genres = (g.genres ?? []).join(', ');
-      return `${g.title} (${g.star_rating}★, ${genres}${tags ? ', ' + tags : ''}${note})`;
-    });
+    .map(g => formatGame(g, { didNotFinish: !completedGames.includes(g) }));
 
-  const liked = completedGames
+  const liked = allRated
     .filter(g => g.star_rating === 3)
-    .map(g => `${g.title} (${(g.genres ?? []).join(', ')})`);
+    .map(g => formatGame(g, { didNotFinish: !completedGames.includes(g) }));
 
-  const disliked = retiredGames.map(g => {
-    const tags = (g.negative_tags ?? []).join(', ');
-    const note = g.free_text ? ` "${g.free_text.slice(0, 80)}"` : '';
-    return `${g.title} (${(g.genres ?? []).join(', ')}${tags ? ', ' + tags : ''}${note})`;
-  });
+  // Low-rated or unrated retired games — still useful as avoidance signals if they have tags
+  const disliked = [
+    ...allRated.filter(g => g.star_rating <= 2).map(g => {
+      const tags = (g.negative_tags ?? []).join(', ');
+      const note = g.free_text ? ` "${g.free_text.slice(0, 80)}"` : '';
+      return `${g.title} (${(g.genres ?? []).join(', ')}${tags ? ', ' + tags : ''}${note})`;
+    }),
+    ...retiredGames.filter(g => g.star_rating === null && (g.negative_tags ?? []).length > 0).map(g => {
+      const tags = (g.negative_tags ?? []).join(', ');
+      const note = g.free_text ? ` "${g.free_text.slice(0, 80)}"` : '';
+      return `${g.title} (${(g.genres ?? []).join(', ')}${tags ? ', ' + tags : ''}${note})`;
+    }),
+  ];
 
   const lines = ['Games this user loves:'];
   if (loved.length) loved.forEach(g => lines.push(`- ${g}`));
