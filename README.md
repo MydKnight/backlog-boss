@@ -20,7 +20,7 @@ A self-hosted game backlog manager with a taste-aware suggestion engine. Built f
 
 ![Guide reader](screenshots/guide-reader.png)
 
-**Guide Reader** — Attach walkthrough guides to any game. Guides are fetched, cleaned with Mozilla Readability, and stored locally for offline reading. Scroll position is saved so you pick up exactly where you left off.
+**Guide Reader** — Attach walkthrough guides to any game. Guides are fetched, cleaned with Mozilla Readability, and stored locally for offline reading. Scroll position is saved server-side, so it syncs across all your devices — you pick up exactly where you left off regardless of which device you're reading on.
 
 ---
 
@@ -214,6 +214,82 @@ For the full picture:
 
 ## Roadmap
 
-- [ ] Provider-agnostic LLM interface (Ollama, Claude, OpenAI, etc.)
-- [ ] Achievement % as a completion signal (Steam API already integrated, just needs wiring)
-- [ ] Automated deploy workflow
+The features below are designed and ready for implementation. Where noted, significant infrastructure already exists in the codebase — they're not greenfield builds.
+
+---
+
+### Game Detail View
+
+Tapping any game card from any tab opens a full-screen modal with rich game info alongside the existing action buttons. Currently tapping a card shows only action buttons (no game info).
+
+**What it would include:**
+- Hero cover art, title, critic score (IGDB aggregated rating / Metacritic-sourced)
+- Genre and theme tags (already stored)
+- Game description/summary (IGDB has this field; not currently fetched or stored)
+- Achievement progress bar and individual unlock list (see below)
+- Attached guides with quick-add button
+- Contextual action buttons based on current game status (all the existing actions, just surfaced from a richer screen)
+
+**What already exists:** All action endpoints and queries. `cover_url`, `genres`, `themes` already in the DB. IGDB enrichment service just needs `summary` and `aggregated_rating` fields added to the fetch.
+
+**What needs building:** `games.summary` and `games.aggregated_rating` columns + IGDB fetch update; `GET /api/games/:igdbId` composite endpoint; `GameDetail.jsx` full-screen component; swap card tap handlers across all four views.
+
+---
+
+### Achievement Tracking
+
+Wire up the Steam achievement data that's already plumbed into the backend but never surfaced in the UI.
+
+**What it would include:**
+- Achievement % progress bar in the game detail view
+- Individual achievement list (name, description, unlocked/locked, unlock date)
+- Lazy-fetched per game when detail view opens — not during bulk sync
+- Only shown for Steam games
+
+**What already exists:** `fetchAchievementPct()` function in `src/server/services/steam.js` (never called). `user_games.achievement_pct` column (exists, always null). Steam API endpoints for individual achievement data are documented in `API_INTEGRATION_NOTES.md`.
+
+**What needs building:** An `achievements` table for individual records; `GET /api/games/:igdbId/achievements` endpoint; wire `fetchAchievementPct()` on detail view open; achievement section in `GameDetail.jsx`.
+
+---
+
+### Per-User Progress Bar Setting
+
+The progress bar on game cards currently shows HLTB time comparison (hours played vs. hours to beat). Some users prefer to see achievement completion % instead. This would be a per-user setting that persists across all devices.
+
+**What it would include:**
+- Toggle in Settings: "Progress bar shows: HLTB Time / Achievement %"
+- Stored server-side in the `users` table — syncs automatically to all devices
+- Falls back to HLTB bar for games with no Steam achievement data
+
+**What already exists:** `Settings.jsx` UI, `GET /api/me` + `PATCH /api/me` endpoints, `users` table.
+
+**What needs building:** `users.progress_bar_mode` column; expose + accept in `/api/me`; toggle in Settings; conditional bar rendering in `Now.jsx` and `Next.jsx`.
+
+---
+
+### Offline Guide Pinning
+
+Chrome mobile aggressively evicts cached content when a tab has been in the background. If the device is offline when you return to a guide, the content may be gone. A manual "save offline" pin solves this with a dedicated SW cache that isn't subject to LRU eviction.
+
+**What it would include:**
+- Pin icon per guide in the guide list and reader toolbar
+- Pinned guides stored in a separate `GUIDE_OFFLINE_CACHE` in the service worker — not evicted by the browser
+- "Saved offline" badge on pinned guides
+- Pin state stored server-side (`guides.offline_pinned`) so the badge shows correctly across devices
+- On PWA startup: re-warm pinned guide cache entries in case the browser cleared everything
+
+**What already exists:** Service worker with cache infrastructure (`public/sw.js`). `guides` table with per-guide metadata pattern. Guide content API endpoint.
+
+**What needs building:** `guides.offline_pinned` column; `PATCH /api/guides/:id/pin`; `GUIDE_OFFLINE_CACHE` in SW with postMessage handler for explicit cache/uncache; pin button in `GuideSheet.jsx` and `GuideReader.jsx`; startup cache re-warming.
+
+---
+
+### Provider-Agnostic LLM Interface
+
+The taste engine currently hardcodes Ollama as the inference and embedding provider. The integration points (`src/server/services/ollama.js` and `src/server/services/embeddings.js`) are designed to be swappable — a provider interface that supports Ollama, Claude, OpenAI, and others would make the app usable without local hardware.
+
+---
+
+### Automated Deploy Workflow
+
+A CI/CD pipeline (GitHub Actions or similar) to build the Docker image and push to the NAS on merge to `main`. Currently deploy is manual.
