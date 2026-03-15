@@ -6,6 +6,28 @@ A self-hosted game backlog manager with a taste-aware suggestion engine. Built f
 
 ---
 
+## Current Status
+
+**Active — deployed on QNAP NAS via Docker + Cloudflare Zero Trust.**
+
+All 8 phases complete. The app is fully built and running.
+
+| Component | Status |
+|---|---|
+| Steam sync + IGDB enrichment + HLTB benchmarks | ✅ Complete |
+| PWA (Now / Next / Done / History views) | ✅ Complete |
+| Ongoing / backburner game types | ✅ Complete |
+| Ollama taste engine (embedding + LLM suggestions) | ✅ Complete |
+| Guide reader (offline, scroll sync) | ✅ Complete |
+| Data quality tools (HLTB / IGDB triage) | ✅ Complete |
+| Guide source search + paste content mode | ✅ Complete |
+| Multi-user auth via Cloudflare Access | ✅ Complete |
+| Tests | ✗ None |
+
+Roadmap features (Game Detail View, Achievement Tracking, Offline Guide Pinning, provider-agnostic LLM interface) are designed and ready for implementation — see the Roadmap section below.
+
+---
+
 ## What It Does
 
 **Now** — Your in-progress games, sorted by proximity to completion using HowLongToBeat benchmarks. At a glance you can see which games you're closest to finishing.
